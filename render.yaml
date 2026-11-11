@@ -14,3 +14,8 @@ services:
       # Opcional: si no se setea, el QR usa la URL pública automáticamente.
       - key: BASE_URL
         sync: false
+      # Persistencia con Upstash Redis (para que no se pierdan las asistencias).
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false

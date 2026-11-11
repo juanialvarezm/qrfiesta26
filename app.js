@@ -2,37 +2,19 @@ require("dotenv").config();
 
 const express = require("express");
 const QRCode = require("qrcode");
-const fs = require("node:fs");
 const path = require("node:path");
 const { timingSafeEqual } = require("node:crypto");
+const { createStore } = require("./store");
 
 const app = express();
 // Render (y otros PaaS) sirven detrás de un proxy HTTPS. Con esto req.protocol
 // refleja "https", así el QR se genera con la URL pública correcta.
 app.set("trust proxy", true);
 const port = Number(process.env.PORT) || 3000;
-const dataDirectory = path.join(__dirname, "data");
-const attendanceFile = path.join(dataDirectory, "attendance.json");
+const attendanceFile = path.join(__dirname, "data", "attendance.json");
 
-fs.mkdirSync(dataDirectory, { recursive: true });
-
-// Cada asistencia se guarda como { name, checkedInAt } y se indexa por el
-// nombre normalizado (minúsculas) para evitar registros duplicados.
-let attendees = new Map();
-if (fs.existsSync(attendanceFile)) {
-  const savedAttendees = JSON.parse(fs.readFileSync(attendanceFile, "utf8"));
-  if (!Array.isArray(savedAttendees)) {
-    throw new Error("data/attendance.json debe contener una lista de asistencias.");
-  }
-  for (const attendee of savedAttendees) {
-    const { name } = normalizeName(attendee.name ?? attendee.email);
-    if (!name) continue;
-    attendees.set(name.toLowerCase(), {
-      name,
-      checkedInAt: attendee.checkedInAt ?? new Date().toISOString(),
-    });
-  }
-}
+// Guarda en Upstash Redis si están sus variables; si no, en archivo local.
+const store = createStore(attendanceFile);
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
@@ -44,10 +26,6 @@ app.get("/check-in", (req, res) => {
 app.get("/ruleta", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "ruleta.html"));
 });
-
-function persist() {
-  fs.writeFileSync(attendanceFile, `${JSON.stringify([...attendees.values()], null, 2)}\n`);
-}
 
 function normalizeName(rawName) {
   const name = typeof rawName === "string" ? rawName.trim().replace(/\s+/g, " ") : "";
@@ -101,30 +79,26 @@ app.get("/api/qr", async (req, res, next) => {
     const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
     const checkInUrl = new URL("/check-in", baseUrl).toString();
     const image = await QRCode.toDataURL(checkInUrl, { width: 280, margin: 2 });
-    res.json({ image, checkInUrl, count: attendees.size });
+    res.json({ image, checkInUrl, count: await store.count() });
   } catch (error) {
     next(error);
   }
 });
 
-app.post("/api/attendance", (req, res) => {
+app.post("/api/attendance", async (req, res, next) => {
   const { name, error } = normalizeName(req.body.name);
   if (error) {
     return res.status(400).json({ error });
   }
 
-  const key = name.toLowerCase();
-  if (attendees.has(key)) {
-    return res.status(409).json({ error: "Ya hay una asistencia registrada con ese nombre." });
-  }
-
   const attendee = { name, checkedInAt: new Date().toISOString() };
-  attendees.set(key, attendee);
 
   try {
-    persist();
+    const added = await store.add(name.toLowerCase(), attendee);
+    if (!added) {
+      return res.status(409).json({ error: "Ya hay una asistencia registrada con ese nombre." });
+    }
   } catch (error) {
-    attendees.delete(key);
     console.error(error);
     return res.status(500).json({ error: "No se pudo guardar la asistencia." });
   }
@@ -137,29 +111,29 @@ app.get("/admin", isAdmin, (req, res) => {
 });
 
 // Listado público: lo usan la página de inicio y la ruleta.
-app.get("/api/attendees", (req, res) => {
-  res.json([...attendees.values()]);
+app.get("/api/attendees", async (req, res, next) => {
+  try {
+    res.json(await store.list());
+  } catch (error) {
+    next(error);
+  }
 });
 
 // Alta manual (solo admin).
-app.post("/api/attendees", isAdmin, (req, res) => {
+app.post("/api/attendees", isAdmin, async (req, res) => {
   const { name, error } = normalizeName(req.body.name);
   if (error) {
     return res.status(400).json({ error });
   }
 
-  const key = name.toLowerCase();
-  if (attendees.has(key)) {
-    return res.status(409).json({ error: "Ese nombre ya está registrado." });
-  }
-
   const attendee = { name, checkedInAt: new Date().toISOString() };
-  attendees.set(key, attendee);
 
   try {
-    persist();
+    const added = await store.add(name.toLowerCase(), attendee);
+    if (!added) {
+      return res.status(409).json({ error: "Ese nombre ya está registrado." });
+    }
   } catch (error) {
-    attendees.delete(key);
     console.error(error);
     return res.status(500).json({ error: "No se pudo guardar la asistencia." });
   }
@@ -168,20 +142,15 @@ app.post("/api/attendees", isAdmin, (req, res) => {
 });
 
 // Baja (solo admin).
-app.delete("/api/attendees/:name", isAdmin, (req, res) => {
+app.delete("/api/attendees/:name", isAdmin, async (req, res) => {
   const key = String(req.params.name || "").trim().replace(/\s+/g, " ").toLowerCase();
 
-  if (!attendees.has(key)) {
-    return res.status(404).json({ error: "No se encontró esa asistencia." });
-  }
-
-  const removed = attendees.get(key);
-  attendees.delete(key);
-
   try {
-    persist();
+    const removed = await store.remove(key);
+    if (!removed) {
+      return res.status(404).json({ error: "No se encontró esa asistencia." });
+    }
   } catch (error) {
-    attendees.set(key, removed);
     console.error(error);
     return res.status(500).json({ error: "No se pudo eliminar la asistencia." });
   }
@@ -199,4 +168,5 @@ app.use((error, req, res, next) => {
 
 app.listen(port, () => {
   console.log(`Servidor listo en http://localhost:${port}`);
+  console.log(`Almacenamiento: ${store.kind}`);
 });
