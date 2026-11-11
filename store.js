@@ -70,12 +70,14 @@ function createFileStore(attendanceFile) {
 
 function createRedisStore() {
   const { Redis } = require("@upstash/redis");
-  // Guardamos y leemos JSON explícito para evitar ambigüedades del cliente.
-  const redis = Redis.fromEnv({ automaticDeserialization: false });
+  // Cliente por defecto: al escribir serializa el objeto a JSON, y al leer con
+  // hgetall devuelve un objeto parseando cada valor con try/catch (no rompe si
+  // hay un dato viejo o inválido).
+  const redis = Redis.fromEnv();
   const KEY = "attendees";
 
-  // Convierte un valor del hash en un registro { name, checkedInAt }, tolerando
-  // objetos ya parseados y valores viejos/crudos (p. ej. solo el nombre).
+  // Normaliza un valor del hash a { name, checkedInAt }, tolerando valores ya
+  // parseados (objeto) y datos viejos/crudos (p. ej. solo el nombre).
   function decode(value, key) {
     if (value && typeof value === "object") return value;
     if (typeof value === "string") {
@@ -103,7 +105,7 @@ function createRedisStore() {
       return Number(await redis.hlen(KEY)) || 0;
     },
     async add(key, record) {
-      const set = await redis.hsetnx(KEY, key, JSON.stringify(record));
+      const set = await redis.hsetnx(KEY, key, record);
       return Number(set) === 1;
     },
     async remove(key) {
