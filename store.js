@@ -74,21 +74,37 @@ function createRedisStore() {
   const redis = Redis.fromEnv({ automaticDeserialization: false });
   const KEY = "attendees";
 
+  // Convierte un valor del hash en un registro { name, checkedInAt }, tolerando
+  // objetos ya parseados y valores viejos/crudos (p. ej. solo el nombre).
+  function decode(value, key) {
+    if (value && typeof value === "object") return value;
+    if (typeof value === "string") {
+      try {
+        const parsed = JSON.parse(value);
+        if (parsed && typeof parsed === "object" && typeof parsed.name === "string") {
+          return parsed;
+        }
+      } catch {
+        // No era JSON: lo tratamos como el nombre a secas.
+      }
+      return { name: value, checkedInAt: null };
+    }
+    return { name: String(key), checkedInAt: null };
+  }
+
   return {
     kind: "Upstash Redis",
     async list() {
       const all = await redis.hgetall(KEY);
       if (!all) return [];
-      return Object.values(all).map((value) =>
-        typeof value === "string" ? JSON.parse(value) : value
-      );
+      return Object.entries(all).map(([key, value]) => decode(value, key));
     },
     async count() {
-      return await redis.hlen(KEY);
+      return Number(await redis.hlen(KEY)) || 0;
     },
     async add(key, record) {
       const set = await redis.hsetnx(KEY, key, JSON.stringify(record));
-      return set === 1 || set === true;
+      return Number(set) === 1;
     },
     async remove(key) {
       const removed = await redis.hdel(KEY, key);
