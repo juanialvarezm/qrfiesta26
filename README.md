@@ -50,3 +50,4 @@ Queda en http://localhost:3000 (sin variables de Upstash usa el archivo local).
 - El plan free de Render "duerme" tras ~15 min sin tráfico (la primera visita
   después es lenta, pero **los datos no se pierden** si usás Redis).
 - La lista de asistentes y la ruleta son **públicas** para cualquiera con el link.
+# qrfiesta26
