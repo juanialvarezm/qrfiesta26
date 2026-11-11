@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: qr-fiesta
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      # Se cargan manualmente en el panel de Render (son secretos).
+      - key: ADMIN_USER
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      # Opcional: si no se setea, el QR usa la URL pública automáticamente.
+      - key: BASE_URL
+        sync: false

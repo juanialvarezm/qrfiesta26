@@ -1,0 +1,15 @@
+{
+  "name": "qr-asistencia",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Registro de asistencia mediante código QR",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "qrcode": "^1.5.4"
+  }
+}

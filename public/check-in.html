@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Confirmar asistencia</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="card">
+      <h1>Confirmar asistencia</h1>
+      <p class="lead">Ingresá tu nombre para registrar tu asistencia.</p>
+
+      <form id="form">
+        <div class="field">
+          <label for="name">Nombre y apellido</label>
+          <input id="name" name="name" type="text" autocomplete="name" placeholder="Ej.: María Gómez" required>
+        </div>
+        <button class="btn" type="submit">Confirmar asistencia</button>
+      </form>
+      <p class="message" id="message" role="status" aria-live="polite"></p>
+    </main>
+
+    <script>
+      document.querySelector("#form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const message = document.querySelector("#message");
+        const button = event.currentTarget.querySelector("button");
+        button.disabled = true;
+        message.className = "message";
+        message.textContent = "Registrando…";
+
+        try {
+          const response = await fetch("/api/attendance", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: document.querySelector("#name").value })
+          });
+          const result = await response.json();
+          if (response.ok) {
+            window.location.assign("/");
+            return;
+          }
+          message.textContent = result.error || "No se pudo registrar la asistencia.";
+          message.classList.add("error");
+          button.disabled = false;
+        } catch {
+          message.textContent = "No se pudo conectar. Intentá nuevamente.";
+          message.classList.add("error");
+          button.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Ruleta de premios</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div class="page">
+      <main class="card card--wide" style="text-align:center">
+        <h1>Ruleta de premios</h1>
+        <p class="lead" style="margin-left:auto">Girá para elegir al azar entre los asistentes confirmados.</p>
+
+        <div class="field" style="max-width:360px;margin:20px auto 0;text-align:left">
+          <label for="prize">Premio a sortear (opcional)</label>
+          <input id="prize" type="text" placeholder="Ej.: Gift card, día libre…">
+        </div>
+
+        <div class="wheel-wrap" id="wheel-wrap">
+          <div class="pointer"></div>
+          <canvas id="wheel" width="360" height="360"></canvas>
+        </div>
+
+        <p class="winner" id="winner"></p>
+
+        <div class="toolbar">
+          <button class="btn" id="spin" style="width:auto;padding-left:32px;padding-right:32px">Girar</button>
+          <label class="checkbox">
+            <input type="checkbox" id="remove-winner" checked>
+            Quitar al ganador del sorteo
+          </label>
+        </div>
+
+        <div class="toolbar">
+          <button class="link-btn link-btn--ghost" id="refresh" type="button">Actualizar asistentes</button>
+          <button class="link-btn link-btn--ghost" id="reset" type="button">Reiniciar</button>
+        </div>
+
+        <div id="winners-block" hidden style="margin-top:28px;text-align:left">
+          <div class="section-head">
+            <h2>Ganadores</h2>
+            <span class="pill" id="winners-count">0</span>
+          </div>
+          <ul class="attendees" id="winners"></ul>
+        </div>
+
+        <a class="footer-link" href="/">← Volver al inicio</a>
+      </main>
+    </div>
+
+    <div class="modal" id="modal" hidden>
+      <div class="modal-backdrop" id="modal-backdrop"></div>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-name">
+        <div class="modal-emoji">🎉</div>
+        <p class="modal-prize" id="modal-prize" hidden></p>
+        <h2 class="modal-name" id="modal-name"></h2>
+        <p class="modal-sub">¡Felicitaciones!</p>
+        <button class="btn" id="modal-close" type="button">Cerrar</button>
+      </div>
+    </div>
+
+    <script>
+      const SEG_DARK = "#18181b";
+      const SEG_LIGHT = "#fafafa";
+      const SEG_STROKE = "#d4d4d8";
+
+      const canvas = document.querySelector("#wheel");
+      const ctx = canvas.getContext("2d");
+      const winnerEl = document.querySelector("#winner");
+      const spinBtn = document.querySelector("#spin");
+
+      let pool = [];          // [{ name, label }]
+      let rotation = 0;       // radianes
+      let spinning = false;
+      const winners = [];
+
+      function labelFor(name) {
+        return name;
+      }
+
+      function sizeCanvas() {
+        const cssSize = canvas.clientWidth || 360;
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = cssSize * dpr;
+        canvas.height = cssSize * dpr;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        draw();
+      }
+
+      function draw() {
+        const size = canvas.clientWidth || 360;
+        const cx = size / 2;
+        const cy = size / 2;
+        const r = size / 2 - 2;
+        ctx.clearRect(0, 0, size, size);
+
+        const n = pool.length;
+        if (n === 0) {
+          ctx.fillStyle = SEG_LIGHT;
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.strokeStyle = SEG_STROKE;
+          ctx.stroke();
+          ctx.fillStyle = "#8a8a8a";
+          ctx.font = "500 15px -apple-system, system-ui, sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillText("Sin asistentes", cx, cy);
+          return;
+        }
+
+        const arc = (2 * Math.PI) / n;
+        const fontSize = Math.max(9, Math.min(16, 300 / n));
+
+        for (let i = 0; i < n; i++) {
+          const start = rotation + i * arc;
+          const end = start + arc;
+
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.arc(cx, cy, r, start, end);
+          ctx.closePath();
+          ctx.fillStyle = i % 2 === 0 ? SEG_DARK : SEG_LIGHT;
+          ctx.fill();
+          ctx.strokeStyle = SEG_STROKE;
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          const mid = start + arc / 2;
+          const norm = ((mid % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+          const flip = norm > Math.PI / 2 && norm < (3 * Math.PI) / 2;
+
+          ctx.save();
+          ctx.translate(cx, cy);
+          ctx.rotate(mid);
+          ctx.textBaseline = "middle";
+          ctx.fillStyle = i % 2 === 0 ? SEG_LIGHT : SEG_DARK;
+          ctx.font = `600 ${fontSize}px -apple-system, system-ui, sans-serif`;
+          let label = pool[i].label;
+          const maxChars = Math.max(6, Math.floor(r / (fontSize * 0.42)));
+          if (label.length > maxChars) label = label.slice(0, maxChars - 1) + "…";
+          if (flip) {
+            ctx.rotate(Math.PI);
+            ctx.textAlign = "left";
+            ctx.fillText(label, -(r - 14), 0);
+          } else {
+            ctx.textAlign = "right";
+            ctx.fillText(label, r - 14, 0);
+          }
+          ctx.restore();
+        }
+
+        // Centro
+        ctx.beginPath();
+        ctx.arc(cx, cy, r * 0.13, 0, 2 * Math.PI);
+        ctx.fillStyle = "#ffffff";
+        ctx.fill();
+        ctx.strokeStyle = SEG_STROKE;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+
+      function easeOut(t) {
+        return 1 - Math.pow(1 - t, 3);
+      }
+
+      function spin() {
+        if (spinning || pool.length === 0) return;
+        spinning = true;
+        spinBtn.disabled = true;
+        winnerEl.textContent = "";
+        winnerEl.className = "winner";
+
+        const n = pool.length;
+        const arc = (2 * Math.PI) / n;
+        const winnerIndex = Math.floor(Math.random() * n);
+
+        // El puntero está arriba (-PI/2). Queremos que el centro del
+        // segmento ganador quede bajo el puntero.
+        const target = -Math.PI / 2 - (winnerIndex * arc + arc / 2);
+        const currentMod = ((rotation % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+        const targetMod = ((target % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+        let delta = targetMod - currentMod;
+        if (delta < 0) delta += 2 * Math.PI;
+        const total = delta + (5 + Math.floor(Math.random() * 2)) * 2 * Math.PI;
+
+        const start = rotation;
+        const duration = 4600;
+        const startedAt = performance.now();
+
+        function frame(now) {
+          const t = Math.min(1, (now - startedAt) / duration);
+          rotation = start + total * easeOut(t);
+          draw();
+          if (t < 1) {
+            requestAnimationFrame(frame);
+          } else {
+            rotation = start + total;
+            finishSpin(winnerIndex);
+          }
+        }
+        requestAnimationFrame(frame);
+      }
+
+      function finishSpin(index) {
+        const winner = pool[index];
+        const prize = document.querySelector("#prize").value.trim();
+
+        openModal(winner.name, prize);
+
+        winners.unshift({ name: winner.name, prize, at: new Date() });
+        renderWinners();
+
+        if (document.querySelector("#remove-winner").checked) {
+          pool.splice(index, 1);
+        }
+
+        spinning = false;
+        spinBtn.disabled = pool.length === 0;
+        draw();
+      }
+
+      const modal = document.querySelector("#modal");
+
+      function openModal(name, prize) {
+        const prizeEl = document.querySelector("#modal-prize");
+        if (prize) {
+          prizeEl.textContent = prize;
+          prizeEl.hidden = false;
+        } else {
+          prizeEl.hidden = true;
+        }
+        document.querySelector("#modal-name").textContent = name;
+        modal.hidden = false;
+        requestAnimationFrame(() => modal.classList.add("is-open"));
+        document.querySelector("#modal-close").focus();
+      }
+
+      function closeModal() {
+        modal.classList.remove("is-open");
+        setTimeout(() => { modal.hidden = true; }, 200);
+      }
+
+      document.querySelector("#modal-close").addEventListener("click", closeModal);
+      document.querySelector("#modal-backdrop").addEventListener("click", closeModal);
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && !modal.hidden) closeModal();
+      });
+
+      function renderWinners() {
+        const block = document.querySelector("#winners-block");
+        const listEl = document.querySelector("#winners");
+        document.querySelector("#winners-count").textContent = winners.length;
+        if (winners.length === 0) {
+          block.hidden = true;
+          return;
+        }
+        block.hidden = false;
+        listEl.innerHTML = "";
+        for (const w of winners) {
+          const li = document.createElement("li");
+          const name = document.createElement("span");
+          name.className = "name";
+          name.textContent = w.prize ? `${w.prize} — ${w.name}` : w.name;
+          const time = document.createElement("span");
+          time.className = "time";
+          time.textContent = w.at.toLocaleTimeString("es-AR");
+          li.append(name, time);
+          listEl.append(li);
+        }
+      }
+
+      async function loadAttendees() {
+        try {
+          const response = await fetch("/api/attendees");
+          if (!response.ok) throw new Error("No se pudo cargar el listado.");
+          const attendees = await response.json();
+          pool = attendees.map((a) => ({ name: a.name, label: labelFor(a.name) }));
+          rotation = 0;
+          spinBtn.disabled = pool.length === 0;
+          if (pool.length === 0) {
+            winnerEl.className = "winner";
+            winnerEl.innerHTML = '<span>No hay asistencias todavía.</span>';
+          }
+          draw();
+        } catch (error) {
+          winnerEl.className = "winner error";
+          winnerEl.textContent = error.message;
+        }
+      }
+
+      spinBtn.addEventListener("click", spin);
+      document.querySelector("#refresh").addEventListener("click", loadAttendees);
+      document.querySelector("#reset").addEventListener("click", () => {
+        winners.length = 0;
+        renderWinners();
+        winnerEl.textContent = "";
+        winnerEl.className = "winner";
+        loadAttendees();
+      });
+      window.addEventListener("resize", sizeCanvas);
+
+      sizeCanvas();
+      loadAttendees();
+    </script>
+  </body>
+</html>

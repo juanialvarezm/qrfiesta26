@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Panel de asistencia</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div class="page">
+      <main class="card card--wide">
+        <div class="section-head">
+          <h1>Asistencias registradas</h1>
+          <span class="pill" id="count">—</span>
+        </div>
+
+        <form class="add-form" id="add-form">
+          <input id="new-name" type="text" autocomplete="off" placeholder="agregar nombre manualmente" required>
+          <button class="btn" type="submit">Agregar</button>
+        </form>
+        <p class="message" id="form-message" role="status" aria-live="polite"></p>
+
+        <div class="list-scroll">
+          <ul class="attendees" id="attendees">
+            <li class="empty">Cargando…</li>
+          </ul>
+        </div>
+
+        <div class="btn-row" style="margin-top:24px">
+          <a class="link-btn link-btn--ghost" href="/">Volver al inicio</a>
+          <a class="link-btn" href="/ruleta">Abrir la ruleta 🎁</a>
+        </div>
+      </main>
+    </div>
+
+    <script>
+      const list = document.querySelector("#attendees");
+      const countEl = document.querySelector("#count");
+      const formMessage = document.querySelector("#form-message");
+
+      function render(attendees) {
+        countEl.textContent = attendees.length;
+        list.innerHTML = "";
+        if (attendees.length === 0) {
+          list.innerHTML = '<li class="empty">Todavía no hay asistencias.</li>';
+          return;
+        }
+        const sorted = [...attendees].sort(
+          (a, b) => new Date(b.checkedInAt) - new Date(a.checkedInAt)
+        );
+        for (const attendee of sorted) {
+          const item = document.createElement("li");
+
+          const name = document.createElement("span");
+          name.className = "name";
+          name.textContent = attendee.name;
+
+          const meta = document.createElement("span");
+          meta.className = "meta";
+
+          const time = document.createElement("span");
+          time.className = "time";
+          time.textContent = new Date(attendee.checkedInAt).toLocaleString("es-AR");
+
+          const remove = document.createElement("button");
+          remove.className = "icon-btn";
+          remove.type = "button";
+          remove.title = `Eliminar ${attendee.name}`;
+          remove.setAttribute("aria-label", `Eliminar ${attendee.name}`);
+          remove.textContent = "✕";
+          remove.addEventListener("click", () => deleteAttendee(attendee.name, item));
+
+          meta.append(time, remove);
+          item.append(name, meta);
+          list.append(item);
+        }
+      }
+
+      async function load() {
+        try {
+          const response = await fetch("/api/attendees");
+          if (!response.ok) throw new Error("No se pudo cargar el listado.");
+          render(await response.json());
+        } catch (error) {
+          list.innerHTML = `<li class="empty">${error.message}</li>`;
+        }
+      }
+
+      async function deleteAttendee(name, item) {
+        if (!confirm(`¿Eliminar la asistencia de ${name}?`)) return;
+        try {
+          const response = await fetch(`/api/attendees/${encodeURIComponent(name)}`, {
+            method: "DELETE",
+          });
+          if (!response.ok) {
+            const result = await response.json().catch(() => ({}));
+            throw new Error(result.error || "No se pudo eliminar.");
+          }
+          item.remove();
+          countEl.textContent = Math.max(0, Number(countEl.textContent) - 1);
+          if (!list.children.length) {
+            list.innerHTML = '<li class="empty">Todavía no hay asistencias.</li>';
+          }
+        } catch (error) {
+          formMessage.className = "message error";
+          formMessage.textContent = error.message;
+        }
+      }
+
+      document.querySelector("#add-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const input = document.querySelector("#new-name");
+        const button = event.currentTarget.querySelector("button");
+        button.disabled = true;
+        formMessage.className = "message";
+        formMessage.textContent = "Agregando…";
+        try {
+          const response = await fetch("/api/attendees", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: input.value }),
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || "No se pudo agregar.");
+          formMessage.className = "message ok";
+          formMessage.textContent = `Se agregó ${result.name}.`;
+          input.value = "";
+          await load();
+        } catch (error) {
+          formMessage.className = "message error";
+          formMessage.textContent = error.message;
+        } finally {
+          button.disabled = false;
+        }
+      });
+
+      load();
+    </script>
+  </body>
+</html>
