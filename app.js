@@ -110,10 +110,20 @@ app.get("/admin", isAdmin, (req, res) => {
   res.sendFile(path.join(__dirname, "public", "admin.html"));
 });
 
-// Listado público: lo usan la página de inicio y la ruleta.
-app.get("/api/attendees", async (req, res, next) => {
+// Listado completo (con fechas): solo el admin.
+app.get("/api/attendees", isAdmin, async (req, res, next) => {
   try {
     res.json(await store.list());
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Solo los nombres: público, lo usa la ruleta para sortear.
+app.get("/api/participants", async (req, res, next) => {
+  try {
+    const attendees = await store.list();
+    res.json(attendees.map((attendee) => attendee.name));
   } catch (error) {
     next(error);
   }

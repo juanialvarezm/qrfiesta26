@@ -273,10 +273,10 @@
 
       async function loadAttendees() {
         try {
-          const response = await fetch("/api/attendees");
+          const response = await fetch("/api/participants");
           if (!response.ok) throw new Error("No se pudo cargar el listado.");
-          const attendees = await response.json();
-          pool = attendees.map((a) => ({ name: a.name, label: labelFor(a.name) }));
+          const names = await response.json();
+          pool = names.map((name) => ({ name, label: labelFor(name) }));
           rotation = 0;
           spinBtn.disabled = pool.length === 0;
           if (pool.length === 0) {

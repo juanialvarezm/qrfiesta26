@@ -28,18 +28,6 @@
           <a class="link-btn link-btn--ghost" href="/admin">Panel privado</a>
         </div>
       </main>
-
-      <section class="card card--wide">
-        <div class="section-head">
-          <h2>Asistentes</h2>
-          <span class="pill" id="list-count">—</span>
-        </div>
-        <div class="list-scroll">
-          <ul class="attendees" id="attendees">
-            <li class="empty">Cargando…</li>
-          </ul>
-        </div>
-      </section>
     </div>
 
     <script>
@@ -63,42 +51,6 @@
           const status = document.querySelector("#status");
           status.textContent = error.message;
           status.classList.add("error");
-        });
-
-      fetch("/api/attendees")
-        .then((response) => {
-          if (!response.ok) throw new Error("No se pudo cargar el listado.");
-          return response.json();
-        })
-        .then((attendees) => {
-          document.querySelector("#list-count").textContent = attendees.length;
-          const list = document.querySelector("#attendees");
-          list.innerHTML = "";
-          if (attendees.length === 0) {
-            const empty = document.createElement("li");
-            empty.className = "empty";
-            empty.textContent = "Todavía no hay asistencias.";
-            list.append(empty);
-            return;
-          }
-          const sorted = [...attendees].sort(
-            (a, b) => new Date(b.checkedInAt) - new Date(a.checkedInAt)
-          );
-          for (const attendee of sorted) {
-            const item = document.createElement("li");
-            const name = document.createElement("span");
-            name.className = "name";
-            name.textContent = attendee.name;
-            const time = document.createElement("span");
-            time.className = "time";
-            time.textContent = new Date(attendee.checkedInAt).toLocaleString("es-AR");
-            item.append(name, time);
-            list.append(item);
-          }
-        })
-        .catch(() => {
-          const list = document.querySelector("#attendees");
-          list.innerHTML = '<li class="empty">No se pudo cargar el listado.</li>';
         });
     </script>
   </body>
