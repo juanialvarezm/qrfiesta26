@@ -17,6 +17,13 @@ const attendanceFile = path.join(__dirname, "data", "attendance.json");
 const store = createStore(attendanceFile);
 
 app.use(express.json());
+
+// El panel siempre pide contraseña: interceptamos su HTML ANTES de los
+// estáticos, para que /admin y /admin.html queden igual de protegidos.
+app.get(["/admin", "/admin.html"], isAdmin, (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "admin.html"));
+});
+
 app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/check-in", (req, res) => {
@@ -123,10 +130,6 @@ app.post("/api/attendance", async (req, res, next) => {
   }
 
   return res.status(201).json({ message: "¡Listo! Ya participás del sorteo.", name });
-});
-
-app.get("/admin", isAdmin, (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "admin.html"));
 });
 
 // Listado completo (con fechas): solo el admin.
