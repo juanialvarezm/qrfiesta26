@@ -106,7 +106,7 @@
 
       async function deleteAttendee(attendee, item) {
         if (!confirm(`¿Eliminar a ${attendee.name}?`)) return;
-        const key = attendee.dni || attendee.name;
+        const key = attendee.id || attendee.dni || attendee.name;
         try {
           const response = await fetch(`/api/attendees/${encodeURIComponent(key)}`, {
             method: "DELETE",

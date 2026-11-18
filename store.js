@@ -48,7 +48,7 @@ function createFileStore(attendanceFile) {
   return {
     kind: "archivo local",
     async list() {
-      return [...attendees.values()];
+      return [...attendees.entries()].map(([id, record]) => ({ ...record, id }));
     },
     async count() {
       return attendees.size;
@@ -110,7 +110,7 @@ function createRedisStore() {
     async list() {
       const all = await redis.hgetall(KEY);
       if (!all) return [];
-      return Object.entries(all).map(([key, value]) => decode(value, key));
+      return Object.entries(all).map(([key, value]) => ({ ...decode(value, key), id: key }));
     },
     async count() {
       return Number(await redis.hlen(KEY)) || 0;

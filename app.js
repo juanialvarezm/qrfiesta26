@@ -174,9 +174,10 @@ app.post("/api/attendees", isAdmin, async (req, res) => {
   return res.status(201).json(attendee);
 });
 
-// Baja por DNI (solo admin).
-app.delete("/api/attendees/:dni", isAdmin, async (req, res) => {
-  const key = onlyDigits(req.params.dni);
+// Baja (solo admin). Se borra por la clave real del registro (su "id"),
+// que puede ser el DNI (altas nuevas) o el nombre (datos cargados antes del DNI).
+app.delete("/api/attendees/:id", isAdmin, async (req, res) => {
+  const key = String(req.params.id || "").trim();
 
   try {
     const removed = await store.remove(key);
