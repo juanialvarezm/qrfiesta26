@@ -3,34 +3,42 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>QR de asistencia</title>
+    <title>Sorteo · QR de participación</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
-  <body>
-    <div class="page">
-      <main class="card">
-        <h1>Registro de asistencia</h1>
-        <p class="lead">Compartí este código con quienes quieran registrar su asistencia.</p>
+  <body class="centered">
+    <main class="card card--center">
+      <div class="brand-row">
+        <p class="eyebrow">Sorteo</p>
+        <span class="logo">dgit</span>
+      </div>
+      <h1>Ruleta de premios</h1>
+      <p class="event" id="event"></p>
+      <hr class="hr">
 
-        <div class="qr-frame" id="qr-frame" hidden>
-          <img id="qr" alt="Código QR de registro">
-        </div>
-        <p class="message" id="status">Generando código QR…</p>
-        <a class="link" id="link" hidden></a>
+      <p class="lead">Compartí este código para que cada persona se anote con su DNI.</p>
 
-        <div class="count">
-          Asistencias confirmadas
-          <strong id="count">—</strong>
-        </div>
+      <div class="qr-frame" id="qr-frame" hidden>
+        <img id="qr" alt="Código QR de participación">
+      </div>
+      <p class="message" id="status">Generando código QR…</p>
+      <a class="link" id="link" hidden></a>
 
-        <div class="btn-row">
-          <a class="link-btn" href="/ruleta">Abrir la ruleta 🎁</a>
-          <a class="link-btn link-btn--ghost" href="/admin">Panel privado</a>
-        </div>
-      </main>
-    </div>
+      <div class="count">
+        Participantes
+        <strong id="count">—</strong>
+      </div>
+
+      <div class="btn-row">
+        <a class="link-btn" href="/ruleta">Abrir la ruleta 🎁</a>
+        <a class="link-btn link-btn--ghost" href="/admin">Panel privado</a>
+      </div>
+    </main>
 
     <script>
+      const EVENT = "Fiesta de Navidad DGIT · 26 de noviembre de 2026";
+      document.querySelector("#event").textContent = EVENT;
+
       fetch("/api/qr")
         .then((response) => {
           if (!response.ok) throw new Error("No se pudo generar el QR.");
@@ -40,7 +48,7 @@
           const qr = document.querySelector("#qr");
           qr.src = image;
           document.querySelector("#qr-frame").hidden = false;
-          document.querySelector("#status").textContent = "Escaneá el QR para registrar tu asistencia.";
+          document.querySelector("#status").textContent = "Escaneá el QR para participar del sorteo.";
           const link = document.querySelector("#link");
           link.href = checkInUrl;
           link.textContent = checkInUrl;

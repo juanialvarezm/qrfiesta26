@@ -3,19 +3,29 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Panel de asistencia</title>
+    <title>Panel · Participantes</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
-  <body>
+  <body class="centered">
     <div class="page">
       <main class="card card--wide">
         <div class="section-head">
-          <h1>Asistencias registradas</h1>
+          <div>
+            <p class="eyebrow">Panel privado</p>
+            <h1 style="margin-top:4px">Participantes del sorteo</h1>
+          </div>
           <span class="pill" id="count">—</span>
         </div>
 
         <form class="add-form" id="add-form">
-          <input id="new-name" type="text" autocomplete="off" placeholder="agregar nombre manualmente" required>
+          <div class="field">
+            <label for="new-name">Nombre y apellido</label>
+            <input id="new-name" type="text" autocomplete="off" placeholder="Ej.: Valentina Palumbo" required>
+          </div>
+          <div class="field">
+            <label for="new-dni">DNI</label>
+            <input id="new-dni" type="text" inputmode="numeric" autocomplete="off" placeholder="Sin puntos" required>
+          </div>
           <button class="btn" type="submit">Agregar</button>
         </form>
         <p class="message" id="form-message" role="status" aria-live="polite"></p>
@@ -42,7 +52,7 @@
         countEl.textContent = attendees.length;
         list.innerHTML = "";
         if (attendees.length === 0) {
-          list.innerHTML = '<li class="empty">Todavía no hay asistencias.</li>';
+          list.innerHTML = '<li class="empty">Todavía no hay participantes.</li>';
           return;
         }
         const sorted = [...attendees].sort(
@@ -51,9 +61,17 @@
         for (const attendee of sorted) {
           const item = document.createElement("li");
 
-          const name = document.createElement("span");
+          const left = document.createElement("div");
+          const name = document.createElement("div");
           name.className = "name";
           name.textContent = attendee.name;
+          left.append(name);
+          if (attendee.dni) {
+            const sub = document.createElement("div");
+            sub.className = "sub";
+            sub.textContent = "DNI " + attendee.dni;
+            left.append(sub);
+          }
 
           const meta = document.createElement("span");
           meta.className = "meta";
@@ -65,13 +83,13 @@
           const remove = document.createElement("button");
           remove.className = "icon-btn";
           remove.type = "button";
-          remove.title = `Eliminar ${attendee.name}`;
-          remove.setAttribute("aria-label", `Eliminar ${attendee.name}`);
+          remove.title = `Eliminar a ${attendee.name}`;
+          remove.setAttribute("aria-label", `Eliminar a ${attendee.name}`);
           remove.textContent = "✕";
-          remove.addEventListener("click", () => deleteAttendee(attendee.name, item));
+          remove.addEventListener("click", () => deleteAttendee(attendee, item));
 
           meta.append(time, remove);
-          item.append(name, meta);
+          item.append(left, meta);
           list.append(item);
         }
       }
@@ -86,10 +104,11 @@
         }
       }
 
-      async function deleteAttendee(name, item) {
-        if (!confirm(`¿Eliminar la asistencia de ${name}?`)) return;
+      async function deleteAttendee(attendee, item) {
+        if (!confirm(`¿Eliminar a ${attendee.name}?`)) return;
+        const key = attendee.dni || attendee.name;
         try {
-          const response = await fetch(`/api/attendees/${encodeURIComponent(name)}`, {
+          const response = await fetch(`/api/attendees/${encodeURIComponent(key)}`, {
             method: "DELETE",
           });
           if (!response.ok) {
@@ -99,7 +118,7 @@
           item.remove();
           countEl.textContent = Math.max(0, Number(countEl.textContent) - 1);
           if (!list.children.length) {
-            list.innerHTML = '<li class="empty">Todavía no hay asistencias.</li>';
+            list.innerHTML = '<li class="empty">Todavía no hay participantes.</li>';
           }
         } catch (error) {
           formMessage.className = "message error";
@@ -109,7 +128,8 @@
 
       document.querySelector("#add-form").addEventListener("submit", async (event) => {
         event.preventDefault();
-        const input = document.querySelector("#new-name");
+        const nameInput = document.querySelector("#new-name");
+        const dniInput = document.querySelector("#new-dni");
         const button = event.currentTarget.querySelector("button");
         button.disabled = true;
         formMessage.className = "message";
@@ -118,13 +138,15 @@
           const response = await fetch("/api/attendees", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: input.value }),
+            body: JSON.stringify({ name: nameInput.value, dni: dniInput.value }),
           });
           const result = await response.json();
           if (!response.ok) throw new Error(result.error || "No se pudo agregar.");
           formMessage.className = "message ok";
-          formMessage.textContent = `Se agregó ${result.name}.`;
-          input.value = "";
+          formMessage.textContent = `Se agregó a ${result.name}.`;
+          nameInput.value = "";
+          dniInput.value = "";
+          nameInput.focus();
           await load();
         } catch (error) {
           formMessage.className = "message error";

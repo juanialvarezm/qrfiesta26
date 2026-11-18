@@ -4,7 +4,7 @@ const express = require("express");
 const QRCode = require("qrcode");
 const path = require("node:path");
 const { timingSafeEqual } = require("node:crypto");
-const { createStore } = require("./store");
+const { createStore, onlyDigits } = require("./store");
 
 const app = express();
 // Render (y otros PaaS) sirven detrás de un proxy HTTPS. Con esto req.protocol
@@ -37,6 +37,18 @@ function normalizeName(rawName) {
     return { error: "El nombre es demasiado largo." };
   }
   return { name };
+}
+
+function normalizeDni(rawDni) {
+  const dni = onlyDigits(rawDni);
+
+  if (dni.length < 7) {
+    return { error: "Ingresá un DNI válido (sin puntos)." };
+  }
+  if (dni.length > 9) {
+    return { error: "El DNI es demasiado largo." };
+  }
+  return { dni };
 }
 
 function isAdmin(req, res, next) {
@@ -86,24 +98,31 @@ app.get("/api/qr", async (req, res, next) => {
 });
 
 app.post("/api/attendance", async (req, res, next) => {
-  const { name, error } = normalizeName(req.body.name);
-  if (error) {
-    return res.status(400).json({ error });
+  const { name, error: nameError } = normalizeName(req.body.name);
+  if (nameError) {
+    return res.status(400).json({ error: nameError });
+  }
+  const { dni, error: dniError } = normalizeDni(req.body.dni);
+  if (dniError) {
+    return res.status(400).json({ error: dniError });
   }
 
-  const attendee = { name, checkedInAt: new Date().toISOString() };
+  const attendee = { name, dni, checkedInAt: new Date().toISOString() };
 
   try {
-    const added = await store.add(name.toLowerCase(), attendee);
+    const added = await store.add(dni, attendee);
     if (!added) {
-      return res.status(409).json({ error: "Ya hay una asistencia registrada con ese nombre." });
+      return res.status(409).json({
+        code: "duplicate",
+        error: "Este DNI ya participa del sorteo.",
+      });
     }
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: "No se pudo guardar la asistencia." });
+    return res.status(500).json({ error: "No se pudo guardar la participación." });
   }
 
-  return res.status(201).json({ message: "¡Asistencia confirmada!" });
+  return res.status(201).json({ message: "¡Listo! Ya participás del sorteo.", name });
 });
 
 app.get("/admin", isAdmin, (req, res) => {
@@ -131,41 +150,45 @@ app.get("/api/participants", async (req, res, next) => {
 
 // Alta manual (solo admin).
 app.post("/api/attendees", isAdmin, async (req, res) => {
-  const { name, error } = normalizeName(req.body.name);
-  if (error) {
-    return res.status(400).json({ error });
+  const { name, error: nameError } = normalizeName(req.body.name);
+  if (nameError) {
+    return res.status(400).json({ error: nameError });
+  }
+  const { dni, error: dniError } = normalizeDni(req.body.dni);
+  if (dniError) {
+    return res.status(400).json({ error: dniError });
   }
 
-  const attendee = { name, checkedInAt: new Date().toISOString() };
+  const attendee = { name, dni, checkedInAt: new Date().toISOString() };
 
   try {
-    const added = await store.add(name.toLowerCase(), attendee);
+    const added = await store.add(dni, attendee);
     if (!added) {
-      return res.status(409).json({ error: "Ese nombre ya está registrado." });
+      return res.status(409).json({ error: "Ese DNI ya está registrado." });
     }
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: "No se pudo guardar la asistencia." });
+    return res.status(500).json({ error: "No se pudo guardar la participación." });
   }
 
   return res.status(201).json(attendee);
 });
 
-// Baja (solo admin).
-app.delete("/api/attendees/:name", isAdmin, async (req, res) => {
-  const key = String(req.params.name || "").trim().replace(/\s+/g, " ").toLowerCase();
+// Baja por DNI (solo admin).
+app.delete("/api/attendees/:dni", isAdmin, async (req, res) => {
+  const key = onlyDigits(req.params.dni);
 
   try {
     const removed = await store.remove(key);
     if (!removed) {
-      return res.status(404).json({ error: "No se encontró esa asistencia." });
+      return res.status(404).json({ error: "No se encontró ese participante." });
     }
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: "No se pudo eliminar la asistencia." });
+    return res.status(500).json({ error: "No se pudo eliminar la participación." });
   }
 
-  return res.json({ message: "Asistencia eliminada." });
+  return res.json({ message: "Participante eliminado." });
 });
 
 app.use((error, req, res, next) => {

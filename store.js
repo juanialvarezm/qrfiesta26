@@ -1,18 +1,29 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-// Capa de datos de asistencias con una interfaz asíncrona común.
-// Cada asistencia es { name, checkedInAt } y se indexa por el nombre en
-// minúsculas (la "key") para evitar duplicados.
+// Capa de datos de participantes con una interfaz asíncrona común.
+// Cada participante es { name, dni, checkedInAt } y se indexa por el DNI
+// (solo dígitos) para que nadie se anote dos veces.
 //
 // - Si hay variables de Upstash Redis, usa Redis (persistente, externo).
 // - Si no, cae a un archivo JSON local (ideal para desarrollo).
 
+function onlyDigits(value) {
+  return typeof value === "string" ? value.replace(/\D/g, "") : "";
+}
+
 function normalizeStored(raw) {
-  const value = typeof raw?.name === "string" ? raw.name : raw?.email;
-  if (typeof value !== "string" || !value.trim()) return null;
-  const name = value.trim().replace(/\s+/g, " ");
-  return { name, checkedInAt: raw.checkedInAt ?? new Date().toISOString() };
+  if (!raw || typeof raw !== "object") return null;
+  const rawName = typeof raw.name === "string" ? raw.name : raw.email;
+  const name = typeof rawName === "string" ? rawName.trim().replace(/\s+/g, " ") : "";
+  if (!name) return null;
+  const dni = onlyDigits(raw.dni);
+  return { name, dni, checkedInAt: raw.checkedInAt ?? new Date().toISOString() };
+}
+
+// Clave única de un registro: el DNI si existe; si no (datos viejos), el nombre.
+function keyFor(record) {
+  return record.dni ? record.dni : record.name.toLowerCase();
 }
 
 function createFileStore(attendanceFile) {
@@ -22,11 +33,11 @@ function createFileStore(attendanceFile) {
   if (fs.existsSync(attendanceFile)) {
     const saved = JSON.parse(fs.readFileSync(attendanceFile, "utf8"));
     if (!Array.isArray(saved)) {
-      throw new Error("data/attendance.json debe contener una lista de asistencias.");
+      throw new Error("data/attendance.json debe contener una lista de participantes.");
     }
     for (const entry of saved) {
       const record = normalizeStored(entry);
-      if (record) attendees.set(record.name.toLowerCase(), record);
+      if (record) attendees.set(keyFor(record), record);
     }
   }
 
@@ -76,22 +87,22 @@ function createRedisStore() {
   const redis = Redis.fromEnv();
   const KEY = "attendees";
 
-  // Normaliza un valor del hash a { name, checkedInAt }, tolerando valores ya
-  // parseados (objeto) y datos viejos/crudos (p. ej. solo el nombre).
+  // Normaliza un valor del hash a { name, dni, checkedInAt }, tolerando valores
+  // ya parseados (objeto), datos viejos y datos crudos (p. ej. solo el nombre).
   function decode(value, key) {
-    if (value && typeof value === "object") return value;
+    let raw = value;
     if (typeof value === "string") {
       try {
-        const parsed = JSON.parse(value);
-        if (parsed && typeof parsed === "object" && typeof parsed.name === "string") {
-          return parsed;
-        }
+        raw = JSON.parse(value);
       } catch {
-        // No era JSON: lo tratamos como el nombre a secas.
+        raw = { name: value }; // no era JSON: lo tratamos como el nombre a secas
       }
-      return { name: value, checkedInAt: null };
     }
-    return { name: String(key), checkedInAt: null };
+    if (!raw || typeof raw !== "object") raw = { name: String(key) };
+    const record = normalizeStored(raw) || { name: String(key), dni: "", checkedInAt: null };
+    // En Redis la "field" del hash es la clave (habitualmente el DNI).
+    if (!record.dni && /^\d{6,}$/.test(String(key))) record.dni = String(key);
+    return record;
   }
 
   return {
@@ -122,4 +133,4 @@ function createStore(attendanceFile) {
   return createFileStore(attendanceFile);
 }
 
-module.exports = { createStore };
+module.exports = { createStore, onlyDigits };

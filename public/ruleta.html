@@ -7,80 +7,117 @@
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
-    <div class="page">
-      <main class="card card--wide" style="text-align:center">
+    <header class="topbar">
+      <div class="title">
         <h1>Ruleta de premios</h1>
-        <p class="lead" style="margin-left:auto">Girá para elegir al azar entre los asistentes confirmados.</p>
+        <span class="event" id="event"></span>
+      </div>
+      <span class="logo">dgit</span>
+    </header>
 
-        <div class="field" style="max-width:360px;margin:20px auto 0;text-align:left">
-          <label for="prize">Premio a sortear (opcional)</label>
-          <input id="prize" type="text" placeholder="Ej.: Gift card, día libre…">
+    <main class="ruleta-main">
+      <!-- Escenario principal -->
+      <section class="stage">
+        <span class="eyebrow">Premio en juego</span>
+        <h2 class="prize-title" id="prize-title">Sin premio asignado</h2>
+        <p class="sub" id="sub">— participantes en la ruleta</p>
+
+        <div class="prize-edit" id="prize-edit">
+          <input id="prize-input" type="text" placeholder="Ej.: Gift card librería" maxlength="60">
+          <button class="btn" id="save-prize" type="button">Guardar</button>
         </div>
 
         <div class="wheel-wrap" id="wheel-wrap">
           <div class="pointer"></div>
-          <canvas id="wheel" width="360" height="360"></canvas>
+          <canvas id="wheel" width="420" height="420"></canvas>
         </div>
 
-        <p class="winner" id="winner"></p>
-
-        <div class="toolbar">
-          <button class="btn" id="spin" style="width:auto;padding-left:32px;padding-right:32px">Girar</button>
-          <label class="checkbox">
-            <input type="checkbox" id="remove-winner" checked>
-            Quitar al ganador del sorteo
-          </label>
+        <div class="actions">
+          <button class="btn" id="spin">Girar la ruleta</button>
+          <button class="btn btn--ghost" id="change-prize" type="button">Cambiar premio</button>
         </div>
 
-        <div class="toolbar">
-          <button class="link-btn link-btn--ghost" id="refresh" type="button">Actualizar asistentes</button>
-          <button class="link-btn link-btn--ghost" id="reset" type="button">Reiniciar</button>
+        <div class="minilinks">
+          <button class="minilink" id="refresh" type="button">Actualizar participantes</button>
+          <button class="minilink" id="reset" type="button">Reiniciar ganadores</button>
         </div>
+      </section>
 
-        <div id="winners-block" hidden style="margin-top:28px;text-align:left">
-          <div class="section-head">
-            <h2>Ganadores</h2>
-            <span class="pill" id="winners-count">0</span>
+      <!-- Panel lateral -->
+      <aside class="side">
+        <div class="side-card">
+          <div class="stat-row">
+            <div>
+              <div class="stat-label">Participantes</div>
+              <div class="stat-num" id="count">—</div>
+              <div class="live">En vivo · desde la planilla</div>
+            </div>
+            <div class="qr-mini">
+              <img id="qr" alt="QR para sumarse">
+              <span class="cap">Escaneá y sumate</span>
+            </div>
           </div>
-          <ul class="attendees" id="winners"></ul>
+        </div>
+
+        <div class="side-card">
+          <h2>Últimos ganadores</h2>
+          <ul class="winners" id="winners"></ul>
+          <p class="side-empty" id="winners-empty">Todavía no giró la ruleta.</p>
         </div>
 
         <a class="footer-link" href="/">← Volver al inicio</a>
-      </main>
-    </div>
+      </aside>
+    </main>
 
-    <div class="modal" id="modal" hidden>
-      <div class="modal-backdrop" id="modal-backdrop"></div>
-      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-name">
-        <div class="modal-emoji">🎉</div>
-        <p class="modal-prize" id="modal-prize" hidden></p>
-        <h2 class="modal-name" id="modal-name"></h2>
-        <p class="modal-sub">¡Felicitaciones!</p>
-        <button class="btn" id="modal-close" type="button">Cerrar</button>
+    <!-- Revelado de ganador -->
+    <div class="reveal" id="reveal" hidden>
+      <div class="reveal-banner">
+        <span class="reveal-tag" id="reveal-tag">Ganador</span>
+        <div class="reveal-name" id="reveal-name"></div>
+        <div class="reveal-event" id="reveal-event"></div>
+      </div>
+      <div class="reveal-foot">
+        <div class="msg" id="reveal-msg">
+          Acercate a la mesa de organización para retirar tu premio.
+          <small>Al confirmar, sale de la ruleta. Si está ausente, vuelve a girar.</small>
+        </div>
+        <div class="btns">
+          <button class="btn" id="deliver" type="button">Confirmar entrega</button>
+          <button class="btn btn--danger" id="absent" type="button">Ausente: volver a girar</button>
+        </div>
       </div>
     </div>
 
     <script>
-      const SEG_DARK = "#18181b";
-      const SEG_LIGHT = "#fafafa";
-      const SEG_STROKE = "#d4d4d8";
+      const EVENT = "Fiesta de Navidad DGIT · 26 de noviembre de 2026";
+      document.querySelector("#event").textContent = EVENT;
+      document.querySelector("#reveal-event").textContent = EVENT;
+
+      const SEG_DARK = "#0f3647";
+      const SEG_LIGHT = "#4a9ec4";
+      const SEG_STROKE = "#ffffff";
 
       const canvas = document.querySelector("#wheel");
       const ctx = canvas.getContext("2d");
-      const winnerEl = document.querySelector("#winner");
       const spinBtn = document.querySelector("#spin");
+      const subEl = document.querySelector("#sub");
+      const countEl = document.querySelector("#count");
+      const prizeTitle = document.querySelector("#prize-title");
 
-      let pool = [];          // [{ name, label }]
+      let pool = [];          // [{ name }]
       let rotation = 0;       // radianes
       let spinning = false;
+      let currentPrize = "";
       const winners = [];
+      const delivered = new Set();  // nombres ya entregados: no vuelven a la ruleta
+      let lastWinner = null;  // índice pendiente de resolución en el revelado
 
-      function labelFor(name) {
-        return name;
+      function updateSub() {
+        subEl.textContent = `${pool.length} participante${pool.length === 1 ? "" : "s"} en la ruleta`;
       }
 
       function sizeCanvas() {
-        const cssSize = canvas.clientWidth || 360;
+        const cssSize = canvas.clientWidth || 420;
         const dpr = window.devicePixelRatio || 1;
         canvas.width = cssSize * dpr;
         canvas.height = cssSize * dpr;
@@ -89,7 +126,7 @@
       }
 
       function draw() {
-        const size = canvas.clientWidth || 360;
+        const size = canvas.clientWidth || 420;
         const cx = size / 2;
         const cy = size / 2;
         const r = size / 2 - 2;
@@ -97,21 +134,20 @@
 
         const n = pool.length;
         if (n === 0) {
-          ctx.fillStyle = SEG_LIGHT;
+          ctx.fillStyle = "#eef1f3";
           ctx.beginPath();
           ctx.arc(cx, cy, r, 0, 2 * Math.PI);
           ctx.fill();
-          ctx.strokeStyle = SEG_STROKE;
-          ctx.stroke();
-          ctx.fillStyle = "#8a8a8a";
-          ctx.font = "500 15px -apple-system, system-ui, sans-serif";
+          ctx.fillStyle = "#8aa0ab";
+          ctx.font = "600 16px -apple-system, system-ui, sans-serif";
           ctx.textAlign = "center";
-          ctx.fillText("Sin asistentes", cx, cy);
+          ctx.fillText("Sin participantes", cx, cy);
           return;
         }
 
         const arc = (2 * Math.PI) / n;
-        const fontSize = Math.max(9, Math.min(16, 300 / n));
+        const showText = n <= 24;
+        const fontSize = Math.max(10, Math.min(16, 300 / n));
 
         for (let i = 0; i < n; i++) {
           const start = rotation + i * arc;
@@ -127,37 +163,39 @@
           ctx.lineWidth = 1;
           ctx.stroke();
 
-          const mid = start + arc / 2;
-          const norm = ((mid % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
-          const flip = norm > Math.PI / 2 && norm < (3 * Math.PI) / 2;
+          if (showText) {
+            const mid = start + arc / 2;
+            const norm = ((mid % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+            const flip = norm > Math.PI / 2 && norm < (3 * Math.PI) / 2;
 
-          ctx.save();
-          ctx.translate(cx, cy);
-          ctx.rotate(mid);
-          ctx.textBaseline = "middle";
-          ctx.fillStyle = i % 2 === 0 ? SEG_LIGHT : SEG_DARK;
-          ctx.font = `600 ${fontSize}px -apple-system, system-ui, sans-serif`;
-          let label = pool[i].label;
-          const maxChars = Math.max(6, Math.floor(r / (fontSize * 0.42)));
-          if (label.length > maxChars) label = label.slice(0, maxChars - 1) + "…";
-          if (flip) {
-            ctx.rotate(Math.PI);
-            ctx.textAlign = "left";
-            ctx.fillText(label, -(r - 14), 0);
-          } else {
-            ctx.textAlign = "right";
-            ctx.fillText(label, r - 14, 0);
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate(mid);
+            ctx.textBaseline = "middle";
+            ctx.fillStyle = i % 2 === 0 ? "#ffffff" : "#0e2f3d";
+            ctx.font = `700 ${fontSize}px -apple-system, system-ui, sans-serif`;
+            let label = pool[i].name;
+            const maxChars = Math.max(6, Math.floor(r / (fontSize * 0.42)));
+            if (label.length > maxChars) label = label.slice(0, maxChars - 1) + "…";
+            if (flip) {
+              ctx.rotate(Math.PI);
+              ctx.textAlign = "left";
+              ctx.fillText(label, -(r - 16), 0);
+            } else {
+              ctx.textAlign = "right";
+              ctx.fillText(label, r - 16, 0);
+            }
+            ctx.restore();
           }
-          ctx.restore();
         }
 
         // Centro
         ctx.beginPath();
-        ctx.arc(cx, cy, r * 0.13, 0, 2 * Math.PI);
+        ctx.arc(cx, cy, r * 0.14, 0, 2 * Math.PI);
         ctx.fillStyle = "#ffffff";
         ctx.fill();
-        ctx.strokeStyle = SEG_STROKE;
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = "#dbe3e7";
+        ctx.lineWidth = 2;
         ctx.stroke();
       }
 
@@ -169,15 +207,11 @@
         if (spinning || pool.length === 0) return;
         spinning = true;
         spinBtn.disabled = true;
-        winnerEl.textContent = "";
-        winnerEl.className = "winner";
 
         const n = pool.length;
         const arc = (2 * Math.PI) / n;
         const winnerIndex = Math.floor(Math.random() * n);
 
-        // El puntero está arriba (-PI/2). Queremos que el centro del
-        // segmento ganador quede bajo el puntero.
         const target = -Math.PI / 2 - (winnerIndex * arc + arc / 2);
         const currentMod = ((rotation % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
         const targetMod = ((target % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
@@ -197,112 +231,149 @@
             requestAnimationFrame(frame);
           } else {
             rotation = start + total;
-            finishSpin(winnerIndex);
+            openReveal(winnerIndex);
           }
         }
         requestAnimationFrame(frame);
       }
 
-      function finishSpin(index) {
+      const reveal = document.querySelector("#reveal");
+
+      function openReveal(index) {
+        lastWinner = index;
         const winner = pool[index];
-        const prize = document.querySelector("#prize").value.trim();
+        document.querySelector("#reveal-name").textContent = winner.name;
+        document.querySelector("#reveal-tag").textContent =
+          currentPrize ? `Ganador · ${currentPrize}` : "Ganador";
+        reveal.hidden = false;
+        requestAnimationFrame(() => reveal.classList.add("is-open"));
+      }
 
-        openModal(winner.name, prize);
+      function closeReveal() {
+        reveal.classList.remove("is-open");
+        setTimeout(() => { reveal.hidden = true; }, 250);
+      }
 
-        winners.unshift({ name: winner.name, prize, at: new Date() });
+      // Confirmar entrega: sale de la ruleta y queda en el historial.
+      document.querySelector("#deliver").addEventListener("click", () => {
+        if (lastWinner == null) return;
+        const winner = pool[lastWinner];
+        winners.unshift({ name: winner.name, prize: currentPrize, at: new Date() });
+        delivered.add(winner.name);
+        pool.splice(lastWinner, 1);
+        lastWinner = null;
         renderWinners();
-
-        if (document.querySelector("#remove-winner").checked) {
-          pool.splice(index, 1);
-        }
-
+        updateSub();
+        draw();
         spinning = false;
         spinBtn.disabled = pool.length === 0;
-        draw();
-      }
+        closeReveal();
+      });
 
-      const modal = document.querySelector("#modal");
-
-      function openModal(name, prize) {
-        const prizeEl = document.querySelector("#modal-prize");
-        if (prize) {
-          prizeEl.textContent = prize;
-          prizeEl.hidden = false;
-        } else {
-          prizeEl.hidden = true;
-        }
-        document.querySelector("#modal-name").textContent = name;
-        modal.hidden = false;
-        requestAnimationFrame(() => modal.classList.add("is-open"));
-        document.querySelector("#modal-close").focus();
-      }
-
-      function closeModal() {
-        modal.classList.remove("is-open");
-        setTimeout(() => { modal.hidden = true; }, 200);
-      }
-
-      document.querySelector("#modal-close").addEventListener("click", closeModal);
-      document.querySelector("#modal-backdrop").addEventListener("click", closeModal);
-      document.addEventListener("keydown", (e) => {
-        if (e.key === "Escape" && !modal.hidden) closeModal();
+      // Ausente: vuelve a la ruleta, no se registra.
+      document.querySelector("#absent").addEventListener("click", () => {
+        lastWinner = null;
+        spinning = false;
+        spinBtn.disabled = pool.length === 0;
+        closeReveal();
       });
 
       function renderWinners() {
-        const block = document.querySelector("#winners-block");
         const listEl = document.querySelector("#winners");
-        document.querySelector("#winners-count").textContent = winners.length;
-        if (winners.length === 0) {
-          block.hidden = true;
-          return;
-        }
-        block.hidden = false;
+        const emptyEl = document.querySelector("#winners-empty");
         listEl.innerHTML = "";
+        emptyEl.hidden = winners.length > 0;
         for (const w of winners) {
           const li = document.createElement("li");
-          const name = document.createElement("span");
-          name.className = "name";
-          name.textContent = w.prize ? `${w.prize} — ${w.name}` : w.name;
+          const left = document.createElement("div");
+          const name = document.createElement("div");
+          name.className = "wname";
+          name.textContent = w.name;
+          left.append(name);
+          if (w.prize) {
+            const prize = document.createElement("div");
+            prize.className = "wprize";
+            prize.textContent = w.prize;
+            left.append(prize);
+          }
           const time = document.createElement("span");
-          time.className = "time";
-          time.textContent = w.at.toLocaleTimeString("es-AR");
-          li.append(name, time);
+          time.className = "wtime";
+          time.textContent = w.at.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
+          li.append(left, time);
           listEl.append(li);
         }
       }
 
-      async function loadAttendees() {
+      // Cambiar premio (edición inline)
+      const prizeEdit = document.querySelector("#prize-edit");
+      const prizeInput = document.querySelector("#prize-input");
+      document.querySelector("#change-prize").addEventListener("click", () => {
+        prizeEdit.classList.toggle("open");
+        if (prizeEdit.classList.contains("open")) {
+          prizeInput.value = currentPrize;
+          prizeInput.focus();
+        }
+      });
+      function savePrize() {
+        currentPrize = prizeInput.value.trim();
+        prizeTitle.textContent = currentPrize || "Sin premio asignado";
+        prizeEdit.classList.remove("open");
+      }
+      document.querySelector("#save-prize").addEventListener("click", savePrize);
+      prizeInput.addEventListener("keydown", (e) => { if (e.key === "Enter") savePrize(); });
+
+      async function loadParticipants(resetRotation = false) {
         try {
           const response = await fetch("/api/participants");
-          if (!response.ok) throw new Error("No se pudo cargar el listado.");
+          if (!response.ok) throw new Error();
           const names = await response.json();
-          pool = names.map((name) => ({ name, label: labelFor(name) }));
-          rotation = 0;
-          spinBtn.disabled = pool.length === 0;
-          if (pool.length === 0) {
-            winnerEl.className = "winner";
-            winnerEl.innerHTML = '<span>No hay asistencias todavía.</span>';
-          }
+          // Los ya entregados no vuelven a la ruleta.
+          pool = names.filter((name) => !delivered.has(name)).map((name) => ({ name }));
+          if (resetRotation) rotation = 0;
+          if (!spinning) spinBtn.disabled = pool.length === 0;
+          updateSub();
           draw();
-        } catch (error) {
-          winnerEl.className = "winner error";
-          winnerEl.textContent = error.message;
+        } catch {
+          subEl.textContent = "No se pudo cargar la lista.";
         }
       }
 
+      async function loadCount() {
+        try {
+          const response = await fetch("/api/qr");
+          if (!response.ok) return;
+          const { image, count } = await response.json();
+          countEl.textContent = count;
+          const qr = document.querySelector("#qr");
+          if (image && qr.src !== image) qr.src = image;
+        } catch {}
+      }
+
       spinBtn.addEventListener("click", spin);
-      document.querySelector("#refresh").addEventListener("click", loadAttendees);
+      document.querySelector("#refresh").addEventListener("click", () => {
+        if (!spinning) loadParticipants(true);
+        loadCount();
+      });
       document.querySelector("#reset").addEventListener("click", () => {
+        if (!confirm("¿Reiniciar la lista de ganadores y volver a cargar todos los participantes?")) return;
         winners.length = 0;
+        delivered.clear();
         renderWinners();
-        winnerEl.textContent = "";
-        winnerEl.className = "winner";
-        loadAttendees();
+        loadParticipants(true);
       });
       window.addEventListener("resize", sizeCanvas);
 
+      // Actualización en vivo del conteo (y de la lista si no está girando).
+      setInterval(() => {
+        loadCount();
+        if (spinning || !reveal.hidden) return;
+        loadParticipants(false);
+      }, 15000);
+
+      renderWinners();
       sizeCanvas();
-      loadAttendees();
+      loadParticipants(true);
+      loadCount();
     </script>
   </body>
 </html>

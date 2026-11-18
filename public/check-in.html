@@ -3,25 +3,73 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Confirmar asistencia</title>
+    <title>Participar del sorteo</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
-  <body>
+  <body class="centered">
     <main class="card">
-      <h1>Confirmar asistencia</h1>
-      <p class="lead">Ingresá tu nombre para registrar tu asistencia.</p>
-
-      <form id="form">
-        <div class="field">
-          <label for="name">Nombre y apellido</label>
-          <input id="name" name="name" type="text" autocomplete="name" placeholder="Ej.: María Gómez" required>
+      <!-- Estado: formulario -->
+      <section id="view-form">
+        <div class="brand-row">
+          <p class="eyebrow">Sorteo</p>
+          <span class="logo">dgit</span>
         </div>
-        <button class="btn" type="submit">Confirmar asistencia</button>
-      </form>
-      <p class="message" id="message" role="status" aria-live="polite"></p>
+        <h1>Ruleta de premios</h1>
+        <p class="event" id="event"></p>
+        <hr class="hr">
+
+        <p class="lead">Completá tus datos para participar. Te lleva menos de un minuto.</p>
+
+        <form id="form">
+          <div class="field">
+            <label for="name">Nombre y apellido</label>
+            <input id="name" name="name" type="text" autocomplete="name" placeholder="Ej.: Valentina Palumbo" required>
+          </div>
+          <div class="field">
+            <label for="dni">DNI</label>
+            <input id="dni" name="dni" type="text" inputmode="numeric" autocomplete="off" placeholder="Sin puntos" required>
+          </div>
+
+          <label class="consent">
+            <input id="consent" type="checkbox" required>
+            <span>Acepto que mis datos se usen solo para este sorteo. Se eliminan al terminar el evento.</span>
+          </label>
+
+          <button class="btn" type="submit">Participar</button>
+        </form>
+        <p class="message" id="message" role="status" aria-live="polite"></p>
+        <span class="footer-note">Una sola participación por DNI.</span>
+      </section>
+
+      <!-- Estado: éxito -->
+      <section id="view-ok" class="card--center" hidden>
+        <div class="state-icon state-icon--ok">✓</div>
+        <h1>¡Ya estás participando!</h1>
+        <p class="lead" id="ok-name">Guardamos tu nombre para el sorteo.</p>
+        <p class="lead">Seguí la ruleta en la pantalla del evento. ¡Suerte!</p>
+        <span class="footer-note">Una sola participación por DNI.</span>
+      </section>
+
+      <!-- Estado: ya anotado -->
+      <section id="view-dup" class="card--center" hidden>
+        <div class="state-icon">!</div>
+        <h1>Ya estás anotado</h1>
+        <p class="lead">Este DNI ya participa del sorteo. No hace falta que vuelvas a completar el formulario.</p>
+        <p class="lead">¿Cargaste mal un dato? Acercate a la mesa de organización para corregirlo.</p>
+        <span class="footer-note">Una sola participación por DNI.</span>
+      </section>
     </main>
 
     <script>
+      const EVENT = "Fiesta de Navidad DGIT · 26 de noviembre de 2026";
+      document.querySelector("#event").textContent = EVENT;
+
+      function show(id) {
+        for (const v of ["view-form", "view-ok", "view-dup"]) {
+          document.querySelector("#" + v).hidden = v !== id;
+        }
+      }
+
       document.querySelector("#form").addEventListener("submit", async (event) => {
         event.preventDefault();
         const message = document.querySelector("#message");
@@ -34,14 +82,26 @@
           const response = await fetch("/api/attendance", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: document.querySelector("#name").value })
+            body: JSON.stringify({
+              name: document.querySelector("#name").value,
+              dni: document.querySelector("#dni").value,
+            }),
           });
-          const result = await response.json();
+          const result = await response.json().catch(() => ({}));
+
           if (response.ok) {
-            window.location.assign("/");
+            const name = (document.querySelector("#name").value || "").trim();
+            document.querySelector("#ok-name").textContent = name
+              ? `${name}, ya estás en la ruleta.`
+              : "Ya estás en la ruleta.";
+            show("view-ok");
             return;
           }
-          message.textContent = result.error || "No se pudo registrar la asistencia.";
+          if (response.status === 409) {
+            show("view-dup");
+            return;
+          }
+          message.textContent = result.error || "No se pudo registrar la participación.";
           message.classList.add("error");
           button.disabled = false;
         } catch {
