@@ -23,10 +23,13 @@
         <span class="prize-category" id="prize-category" hidden></span>
         <p class="sub" id="sub">— participantes en la ruleta</p>
 
+        <div class="prize-nav">
+          <button class="minilink" id="prev-prize" type="button">◀ Anterior</button>
+          <span class="prize-progress" id="prize-progress">—</span>
+          <button class="minilink" id="next-prize" type="button">Siguiente ▶</button>
+        </div>
+
         <div class="prize-edit" id="prize-edit">
-          <select id="prize-category-select" aria-label="Categoría del premio">
-            <option value="">Elegí una categoría…</option>
-          </select>
           <input id="prize-input" type="text" placeholder="Nombre puntual del premio (opcional)" maxlength="60">
           <button class="btn" id="save-prize" type="button">Guardar</button>
         </div>
@@ -38,7 +41,7 @@
 
         <div class="actions">
           <button class="btn" id="spin">Girar la ruleta</button>
-          <button class="btn btn--ghost" id="change-prize" type="button">Cambiar premio</button>
+          <button class="btn btn--ghost" id="change-prize" type="button">Poner nombre del premio</button>
         </div>
 
         <div class="minilinks">
@@ -109,30 +112,41 @@
       const prizeTitle = document.querySelector("#prize-title");
       const prizeCategoryBadge = document.querySelector("#prize-category");
 
-      // Categorías de premios (tomadas de la planilla de regalos).
-      // Para agregar o quitar categorías, editá esta lista.
-      const CATEGORIES = [
-        "Tecnología",
-        "Experiencias",
-        "Matero y térmicos",
-        "Mochilas",
-        "Viaje y oficina",
-        "Casa y gourmet",
-        "Órden de compra",
+      // Secuencia fija de premios, en el orden exacto de la planilla de regalos.
+      // La categoría avanza sola siguiendo este orden; no se elige a mano.
+      // Para ajustar cantidades o categorías, editá los pares [categoría, cantidad].
+      const PRIZE_ORDER = [
+        ["Tecnología", 14],
+        ["Experiencias", 3],
+        ["Matero y térmicos", 1],
+        ["Mochilas", 2],
+        ["Viaje y oficina", 4],
+        ["Casa y gourmet", 2],
+        ["Matero y térmicos", 11],
+        ["Casa y gourmet", 1],
+        ["Matero y térmicos", 3],
+        ["Casa y gourmet", 3],
+        ["Experiencias", 4],
+        ["Órden de compra", 10],
       ];
+      // Lista plana de 58 categorías (una por premio), en orden.
+      const SEQUENCE = PRIZE_ORDER.flatMap(([category, count]) => Array(count).fill(category));
 
       let pool = [];          // [{ name }]
       let rotation = 0;       // radianes
       let spinning = false;
-      let currentPrizeName = "";      // nombre puntual del premio (manual, opcional)
-      let currentPrizeCategory = "";  // categoría elegida de la lista
+      let prizeIndex = 0;                                     // posición actual en la secuencia
+      const prizeNames = new Array(SEQUENCE.length).fill(""); // nombre puntual por premio (manual)
+
+      function currentCategory() { return SEQUENCE[prizeIndex] || ""; }
+      function currentName() { return prizeNames[prizeIndex] || ""; }
 
       // Texto combinado del premio para el revelado y el historial.
       function prizeText() {
-        if (currentPrizeName && currentPrizeCategory) {
-          return `${currentPrizeName} · ${currentPrizeCategory}`;
-        }
-        return currentPrizeName || currentPrizeCategory || "";
+        const name = currentName();
+        const category = currentCategory();
+        if (name && category) return `${name} · ${category}`;
+        return name || category || "";
       }
       const winners = [];
       const delivered = new Set();  // nombres ya entregados: no vuelven a la ruleta
@@ -294,6 +308,8 @@
         draw();
         spinning = false;
         spinBtn.disabled = pool.length === 0;
+        // El premio entregado queda atrás: avanzamos al siguiente de la planilla.
+        if (prizeIndex < SEQUENCE.length - 1) goToPrize(prizeIndex + 1);
         closeReveal();
       });
 
@@ -331,44 +347,52 @@
         }
       }
 
-      // Cambiar premio (edición inline): se elige la categoría de la lista y,
-      // opcionalmente, se escribe el nombre puntual del premio.
+      // La categoría NO se elige: avanza sola con los botones "Anterior"/"Siguiente"
+      // en el orden de la planilla. Lo único manual es el nombre puntual del premio.
       const prizeEdit = document.querySelector("#prize-edit");
       const prizeInput = document.querySelector("#prize-input");
-      const prizeCategorySelect = document.querySelector("#prize-category-select");
+      const prizeProgress = document.querySelector("#prize-progress");
+      const prevPrizeBtn = document.querySelector("#prev-prize");
+      const nextPrizeBtn = document.querySelector("#next-prize");
 
-      // Carga las categorías en el desplegable.
-      for (const category of CATEGORIES) {
-        const option = document.createElement("option");
-        option.value = category;
-        option.textContent = category;
-        prizeCategorySelect.append(option);
-      }
-
-      // Muestra el premio: el nombre puntual como título y la categoría como etiqueta.
+      // Muestra el premio actual: nombre puntual (si hay) como título, la categoría
+      // como etiqueta, y el avance "Premio X de N · Categoría".
       function renderPrize() {
-        prizeTitle.textContent = currentPrizeName || currentPrizeCategory || "Sin premio asignado";
-        // La etiqueta de categoría solo se muestra si hay un nombre puntual
-        // distinto (si no, la categoría ya es el título).
-        if (currentPrizeCategory && currentPrizeName) {
-          prizeCategoryBadge.textContent = currentPrizeCategory;
+        const name = currentName();
+        const category = currentCategory();
+        prizeTitle.textContent = name || category || "Sin premio asignado";
+        // La etiqueta de categoría se muestra cuando hay un nombre puntual
+        // (si no, la categoría ya es el título).
+        if (category && name) {
+          prizeCategoryBadge.textContent = category;
           prizeCategoryBadge.hidden = false;
         } else {
           prizeCategoryBadge.hidden = true;
         }
+        prizeProgress.textContent = `Premio ${prizeIndex + 1} de ${SEQUENCE.length} · ${category}`;
+        prevPrizeBtn.disabled = prizeIndex === 0;
+        nextPrizeBtn.disabled = prizeIndex === SEQUENCE.length - 1;
       }
 
+      // Avanza o retrocede en la secuencia de premios.
+      function goToPrize(index) {
+        prizeIndex = Math.max(0, Math.min(SEQUENCE.length - 1, index));
+        prizeInput.value = currentName();
+        renderPrize();
+      }
+      prevPrizeBtn.addEventListener("click", () => goToPrize(prizeIndex - 1));
+      nextPrizeBtn.addEventListener("click", () => goToPrize(prizeIndex + 1));
+
+      // Nombre puntual del premio (edición inline, opcional).
       document.querySelector("#change-prize").addEventListener("click", () => {
         prizeEdit.classList.toggle("open");
         if (prizeEdit.classList.contains("open")) {
-          prizeCategorySelect.value = currentPrizeCategory;
-          prizeInput.value = currentPrizeName;
-          prizeCategorySelect.focus();
+          prizeInput.value = currentName();
+          prizeInput.focus();
         }
       });
       function savePrize() {
-        currentPrizeCategory = prizeCategorySelect.value;
-        currentPrizeName = prizeInput.value.trim();
+        prizeNames[prizeIndex] = prizeInput.value.trim();
         renderPrize();
         prizeEdit.classList.remove("open");
       }
@@ -424,6 +448,7 @@
       }, 15000);
 
       renderWinners();
+      renderPrize();
       sizeCanvas();
       loadParticipants(true);
       loadCount();

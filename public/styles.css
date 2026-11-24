@@ -433,24 +433,18 @@ input:focus {
   font-weight: 700;
   letter-spacing: 0.04em;
 }
+.prize-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin: 2px 0 6px;
+}
+.prize-progress { color: var(--muted); font-size: 0.82rem; font-weight: 600; }
+.prize-nav .minilink:disabled { opacity: 0.4; cursor: default; text-decoration: none; }
 .prize-edit { display: none; gap: 8px; flex-wrap: wrap; max-width: 420px; margin: 10px auto 0; }
 .prize-edit.open { display: flex; }
-.prize-edit select { flex-basis: 100%; }
 .prize-edit input { flex: 1; min-width: 160px; }
-.prize-edit select {
-  width: 100%;
-  padding: 13px 14px;
-  font: inherit;
-  color: var(--text);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-}
-.prize-edit select:focus {
-  outline: none;
-  border-color: var(--brand);
-  box-shadow: 0 0 0 3px rgba(47, 127, 160, 0.14);
-}
 .prize-edit .btn { width: auto; margin-top: 0; padding: 0 20px; }
 
 .actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 22px; }
