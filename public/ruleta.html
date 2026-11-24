@@ -24,9 +24,8 @@
         <p class="sub" id="sub">— participantes en la ruleta</p>
 
         <div class="prize-nav">
-          <button class="minilink" id="prev-prize" type="button">◀ Anterior</button>
           <span class="prize-progress" id="prize-progress">—</span>
-          <button class="minilink" id="next-prize" type="button">Siguiente ▶</button>
+          <button class="minilink" id="reroll-prize" type="button">↻ Otro al azar</button>
         </div>
 
         <div class="prize-edit" id="prize-edit">
@@ -64,6 +63,14 @@
               <span class="cap">Escaneá y sumate</span>
             </div>
           </div>
+        </div>
+
+        <div class="side-card">
+          <div class="prize-list-head">
+            <h2>Premios</h2>
+            <span class="prize-remaining" id="prize-remaining">—</span>
+          </div>
+          <div class="prize-list" id="prize-list"></div>
         </div>
 
         <div class="side-card">
@@ -112,41 +119,48 @@
       const prizeTitle = document.querySelector("#prize-title");
       const prizeCategoryBadge = document.querySelector("#prize-category");
 
-      // Secuencia fija de premios, en el orden exacto de la planilla de regalos.
-      // La categoría avanza sola siguiendo este orden; no se elige a mano.
-      // Para ajustar cantidades o categorías, editá los pares [categoría, cantidad].
-      const PRIZE_ORDER = [
+      // Premios de la planilla de regalos, por categoría y cantidad.
+      // Para ajustar cantidades o categorías, editá estos pares [categoría, cantidad].
+      const PRIZE_COUNTS = [
         ["Tecnología", 14],
-        ["Experiencias", 3],
-        ["Matero y térmicos", 1],
+        ["Experiencias", 7],
+        ["Matero y térmicos", 15],
         ["Mochilas", 2],
         ["Viaje y oficina", 4],
-        ["Casa y gourmet", 2],
-        ["Matero y térmicos", 11],
-        ["Casa y gourmet", 1],
-        ["Matero y térmicos", 3],
-        ["Casa y gourmet", 3],
-        ["Experiencias", 4],
+        ["Casa y gourmet", 6],
         ["Órden de compra", 10],
       ];
-      // Lista plana de 58 categorías (una por premio), en orden.
-      const SEQUENCE = PRIZE_ORDER.flatMap(([category, count]) => Array(count).fill(category));
+      // Lista de los 58 premios. Cada uno: id, categoría, número dentro de la
+      // categoría, nombre puntual (manual, opcional) y si ya se entregó.
+      const PRIZES = [];
+      for (const [category, count] of PRIZE_COUNTS) {
+        for (let n = 1; n <= count; n++) {
+          PRIZES.push({ id: PRIZES.length, category, n, name: "", drawn: false });
+        }
+      }
 
       let pool = [];          // [{ name }]
       let rotation = 0;       // radianes
       let spinning = false;
-      let prizeIndex = 0;                                     // posición actual en la secuencia
-      const prizeNames = new Array(SEQUENCE.length).fill(""); // nombre puntual por premio (manual)
+      let currentPrizeId = null;  // premio en juego (elegido al azar entre los que quedan)
 
-      function currentCategory() { return SEQUENCE[prizeIndex] || ""; }
-      function currentName() { return prizeNames[prizeIndex] || ""; }
+      function currentPrize() {
+        return PRIZES.find((p) => p.id === currentPrizeId) || null;
+      }
 
-      // Texto combinado del premio para el revelado y el historial.
+      // Elige al azar un premio entre los que todavía no se entregaron (evitando
+      // repetir el que ya está en juego, salvo que sea el único que queda).
+      function pickRandomPrize() {
+        let avail = PRIZES.filter((p) => !p.drawn && p.id !== currentPrizeId);
+        if (!avail.length) avail = PRIZES.filter((p) => !p.drawn);
+        currentPrizeId = avail.length ? avail[Math.floor(Math.random() * avail.length)].id : null;
+      }
+
+      // Texto del premio para el revelado y el historial.
       function prizeText() {
-        const name = currentName();
-        const category = currentCategory();
-        if (name && category) return `${name} · ${category}`;
-        return name || category || "";
+        const p = currentPrize();
+        if (!p) return "";
+        return p.name ? `${p.name} · ${p.category}` : p.category;
       }
       const winners = [];
       const delivered = new Set();  // nombres ya entregados: no vuelven a la ruleta
@@ -308,8 +322,11 @@
         draw();
         spinning = false;
         spinBtn.disabled = pool.length === 0;
-        // El premio entregado queda atrás: avanzamos al siguiente de la planilla.
-        if (prizeIndex < SEQUENCE.length - 1) goToPrize(prizeIndex + 1);
+        // El premio entregado se tacha y sale al azar el próximo.
+        const givenPrize = currentPrize();
+        if (givenPrize) givenPrize.drawn = true;
+        pickRandomPrize();
+        renderPrize();
         closeReveal();
       });
 
@@ -347,52 +364,90 @@
         }
       }
 
-      // La categoría NO se elige: avanza sola con los botones "Anterior"/"Siguiente"
-      // en el orden de la planilla. Lo único manual es el nombre puntual del premio.
+      // La categoría NO se elige: el premio en juego sale al azar de los que quedan.
+      // Lo único manual es el nombre puntual del premio.
       const prizeEdit = document.querySelector("#prize-edit");
       const prizeInput = document.querySelector("#prize-input");
       const prizeProgress = document.querySelector("#prize-progress");
-      const prevPrizeBtn = document.querySelector("#prev-prize");
-      const nextPrizeBtn = document.querySelector("#next-prize");
+      const prizeListEl = document.querySelector("#prize-list");
+      const prizeRemainingEl = document.querySelector("#prize-remaining");
 
-      // Muestra el premio actual: nombre puntual (si hay) como título, la categoría
-      // como etiqueta, y el avance "Premio X de N · Categoría".
+      // Lista lateral: los 58 premios agrupados por categoría. Se tacha cada uno
+      // al entregarse y se resalta el que está en juego.
+      function renderPrizeList() {
+        prizeListEl.innerHTML = "";
+        for (const [category] of PRIZE_COUNTS) {
+          const items = PRIZES.filter((p) => p.category === category);
+          const left = items.filter((p) => !p.drawn).length;
+
+          const group = document.createElement("div");
+          group.className = "prize-group";
+          const head = document.createElement("div");
+          head.className = "prize-group-head";
+          const title = document.createElement("span");
+          title.textContent = category;
+          const count = document.createElement("span");
+          count.className = "prize-group-count";
+          count.textContent = `${left}/${items.length}`;
+          head.append(title, count);
+          group.append(head);
+
+          const ul = document.createElement("ul");
+          for (const p of items) {
+            const li = document.createElement("li");
+            li.className = "prize-item";
+            if (p.drawn) li.classList.add("is-drawn");
+            if (p.id === currentPrizeId) li.classList.add("is-current");
+            li.textContent = p.name || `Premio ${p.n}`;
+            ul.append(li);
+          }
+          group.append(ul);
+          prizeListEl.append(group);
+        }
+      }
+
+      // Muestra el premio en juego: nombre puntual (si hay) como título, la
+      // categoría como etiqueta, y cuántos se entregaron.
       function renderPrize() {
-        const name = currentName();
-        const category = currentCategory();
-        prizeTitle.textContent = name || category || "Sin premio asignado";
-        // La etiqueta de categoría se muestra cuando hay un nombre puntual
-        // (si no, la categoría ya es el título).
-        if (category && name) {
-          prizeCategoryBadge.textContent = category;
-          prizeCategoryBadge.hidden = false;
+        const p = currentPrize();
+        const drawn = PRIZES.filter((x) => x.drawn).length;
+        if (p) {
+          prizeTitle.textContent = p.name || p.category;
+          if (p.name) {
+            prizeCategoryBadge.textContent = p.category;
+            prizeCategoryBadge.hidden = false;
+          } else {
+            prizeCategoryBadge.hidden = true;
+          }
         } else {
+          prizeTitle.textContent = "Todos los premios entregados";
           prizeCategoryBadge.hidden = true;
         }
-        prizeProgress.textContent = `Premio ${prizeIndex + 1} de ${SEQUENCE.length} · ${category}`;
-        prevPrizeBtn.disabled = prizeIndex === 0;
-        nextPrizeBtn.disabled = prizeIndex === SEQUENCE.length - 1;
+        prizeProgress.textContent = `Entregados ${drawn} de ${PRIZES.length}`;
+        prizeRemainingEl.textContent = `${PRIZES.length - drawn} quedan`;
+        renderPrizeList();
       }
 
-      // Avanza o retrocede en la secuencia de premios.
-      function goToPrize(index) {
-        prizeIndex = Math.max(0, Math.min(SEQUENCE.length - 1, index));
-        prizeInput.value = currentName();
+      // "Otro al azar": vuelve a sortear el premio en juego entre los que quedan.
+      document.querySelector("#reroll-prize").addEventListener("click", () => {
+        pickRandomPrize();
+        const p = currentPrize();
+        prizeInput.value = p ? p.name : "";
         renderPrize();
-      }
-      prevPrizeBtn.addEventListener("click", () => goToPrize(prizeIndex - 1));
-      nextPrizeBtn.addEventListener("click", () => goToPrize(prizeIndex + 1));
+      });
 
-      // Nombre puntual del premio (edición inline, opcional).
+      // Nombre puntual del premio en juego (edición inline, opcional).
       document.querySelector("#change-prize").addEventListener("click", () => {
+        if (!currentPrize()) return;
         prizeEdit.classList.toggle("open");
         if (prizeEdit.classList.contains("open")) {
-          prizeInput.value = currentName();
+          prizeInput.value = currentPrize().name;
           prizeInput.focus();
         }
       });
       function savePrize() {
-        prizeNames[prizeIndex] = prizeInput.value.trim();
+        const p = currentPrize();
+        if (p) p.name = prizeInput.value.trim();
         renderPrize();
         prizeEdit.classList.remove("open");
       }
@@ -432,10 +487,14 @@
         loadCount();
       });
       document.querySelector("#reset").addEventListener("click", () => {
-        if (!confirm("¿Reiniciar la lista de ganadores y volver a cargar todos los participantes?")) return;
+        if (!confirm("¿Reiniciar ganadores y premios, y volver a cargar todos los participantes?")) return;
         winners.length = 0;
         delivered.clear();
+        for (const p of PRIZES) p.drawn = false;
+        currentPrizeId = null;
+        pickRandomPrize();
         renderWinners();
+        renderPrize();
         loadParticipants(true);
       });
       window.addEventListener("resize", sizeCanvas);
@@ -448,6 +507,7 @@
       }, 15000);
 
       renderWinners();
+      pickRandomPrize();
       renderPrize();
       sizeCanvas();
       loadParticipants(true);

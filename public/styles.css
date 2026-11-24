@@ -447,6 +447,27 @@ input:focus {
 .prize-edit input { flex: 1; min-width: 160px; }
 .prize-edit .btn { width: auto; margin-top: 0; padding: 0 20px; }
 
+/* Lista lateral de premios */
+.prize-list-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.prize-remaining { color: var(--muted); font-size: 0.8rem; font-weight: 600; white-space: nowrap; }
+.prize-list { margin-top: 8px; max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.prize-group-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-weight: 700; font-size: 0.86rem; color: var(--text); margin-bottom: 5px;
+}
+.prize-group-count { color: var(--muted); font-size: 0.78rem; font-weight: 600; }
+.prize-group ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.prize-item {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 0.78rem;
+  color: var(--text);
+}
+.prize-item.is-current { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 700; }
+.prize-item.is-drawn { text-decoration: line-through; opacity: 0.45; }
+
 .actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 22px; }
 .actions .btn { width: auto; margin-top: 0; padding-left: 34px; padding-right: 34px; }
 
