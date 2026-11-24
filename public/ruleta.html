@@ -20,10 +20,14 @@
       <section class="stage">
         <span class="eyebrow">Premio en juego</span>
         <h2 class="prize-title" id="prize-title">Sin premio asignado</h2>
+        <span class="prize-category" id="prize-category" hidden></span>
         <p class="sub" id="sub">— participantes en la ruleta</p>
 
         <div class="prize-edit" id="prize-edit">
-          <input id="prize-input" type="text" placeholder="Ej.: Gift card librería" maxlength="60">
+          <select id="prize-category-select" aria-label="Categoría del premio">
+            <option value="">Elegí una categoría…</option>
+          </select>
+          <input id="prize-input" type="text" placeholder="Nombre puntual del premio (opcional)" maxlength="60">
           <button class="btn" id="save-prize" type="button">Guardar</button>
         </div>
 
@@ -103,11 +107,33 @@
       const subEl = document.querySelector("#sub");
       const countEl = document.querySelector("#count");
       const prizeTitle = document.querySelector("#prize-title");
+      const prizeCategoryBadge = document.querySelector("#prize-category");
+
+      // Categorías de premios (tomadas de la planilla de regalos).
+      // Para agregar o quitar categorías, editá esta lista.
+      const CATEGORIES = [
+        "Tecnología",
+        "Experiencias",
+        "Matero y térmicos",
+        "Mochilas",
+        "Viaje y oficina",
+        "Casa y gourmet",
+        "Órden de compra",
+      ];
 
       let pool = [];          // [{ name }]
       let rotation = 0;       // radianes
       let spinning = false;
-      let currentPrize = "";
+      let currentPrizeName = "";      // nombre puntual del premio (manual, opcional)
+      let currentPrizeCategory = "";  // categoría elegida de la lista
+
+      // Texto combinado del premio para el revelado y el historial.
+      function prizeText() {
+        if (currentPrizeName && currentPrizeCategory) {
+          return `${currentPrizeName} · ${currentPrizeCategory}`;
+        }
+        return currentPrizeName || currentPrizeCategory || "";
+      }
       const winners = [];
       const delivered = new Set();  // nombres ya entregados: no vuelven a la ruleta
       let lastWinner = null;  // índice pendiente de resolución en el revelado
@@ -243,8 +269,9 @@
         lastWinner = index;
         const winner = pool[index];
         document.querySelector("#reveal-name").textContent = winner.name;
+        const prize = prizeText();
         document.querySelector("#reveal-tag").textContent =
-          currentPrize ? `Ganador · ${currentPrize}` : "Ganador";
+          prize ? `Ganador · ${prize}` : "Ganador";
         reveal.hidden = false;
         requestAnimationFrame(() => reveal.classList.add("is-open"));
       }
@@ -258,7 +285,7 @@
       document.querySelector("#deliver").addEventListener("click", () => {
         if (lastWinner == null) return;
         const winner = pool[lastWinner];
-        winners.unshift({ name: winner.name, prize: currentPrize, at: new Date() });
+        winners.unshift({ name: winner.name, prize: prizeText(), at: new Date() });
         delivered.add(winner.name);
         pool.splice(lastWinner, 1);
         lastWinner = null;
@@ -304,19 +331,45 @@
         }
       }
 
-      // Cambiar premio (edición inline)
+      // Cambiar premio (edición inline): se elige la categoría de la lista y,
+      // opcionalmente, se escribe el nombre puntual del premio.
       const prizeEdit = document.querySelector("#prize-edit");
       const prizeInput = document.querySelector("#prize-input");
+      const prizeCategorySelect = document.querySelector("#prize-category-select");
+
+      // Carga las categorías en el desplegable.
+      for (const category of CATEGORIES) {
+        const option = document.createElement("option");
+        option.value = category;
+        option.textContent = category;
+        prizeCategorySelect.append(option);
+      }
+
+      // Muestra el premio: el nombre puntual como título y la categoría como etiqueta.
+      function renderPrize() {
+        prizeTitle.textContent = currentPrizeName || currentPrizeCategory || "Sin premio asignado";
+        // La etiqueta de categoría solo se muestra si hay un nombre puntual
+        // distinto (si no, la categoría ya es el título).
+        if (currentPrizeCategory && currentPrizeName) {
+          prizeCategoryBadge.textContent = currentPrizeCategory;
+          prizeCategoryBadge.hidden = false;
+        } else {
+          prizeCategoryBadge.hidden = true;
+        }
+      }
+
       document.querySelector("#change-prize").addEventListener("click", () => {
         prizeEdit.classList.toggle("open");
         if (prizeEdit.classList.contains("open")) {
-          prizeInput.value = currentPrize;
-          prizeInput.focus();
+          prizeCategorySelect.value = currentPrizeCategory;
+          prizeInput.value = currentPrizeName;
+          prizeCategorySelect.focus();
         }
       });
       function savePrize() {
-        currentPrize = prizeInput.value.trim();
-        prizeTitle.textContent = currentPrize || "Sin premio asignado";
+        currentPrizeCategory = prizeCategorySelect.value;
+        currentPrizeName = prizeInput.value.trim();
+        renderPrize();
         prizeEdit.classList.remove("open");
       }
       document.querySelector("#save-prize").addEventListener("click", savePrize);
