@@ -3,13 +3,13 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Ruleta de premios</title>
+    <title>Ruleta del sorteo</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
     <header class="topbar">
       <div class="title">
-        <h1>Ruleta de premios</h1>
+        <h1>Ruleta del sorteo</h1>
         <span class="event" id="event"></span>
       </div>
       <span class="logo">dgit</span>
@@ -18,20 +18,9 @@
     <main class="ruleta-main">
       <!-- Escenario principal -->
       <section class="stage">
-        <span class="eyebrow">Premio en juego</span>
-        <h2 class="prize-title" id="prize-title">Sin premio asignado</h2>
-        <span class="prize-category" id="prize-category" hidden></span>
+        <span class="eyebrow">Sorteo en vivo</span>
+        <h2 class="prize-title">¿Quién gana?</h2>
         <p class="sub" id="sub">— participantes en la ruleta</p>
-
-        <div class="prize-nav">
-          <span class="prize-progress" id="prize-progress">—</span>
-          <button class="minilink" id="reroll-prize" type="button">↻ Otro al azar</button>
-        </div>
-
-        <div class="prize-edit" id="prize-edit">
-          <input id="prize-input" type="text" placeholder="Nombre puntual del premio (opcional)" maxlength="60">
-          <button class="btn" id="save-prize" type="button">Guardar</button>
-        </div>
 
         <div class="wheel-wrap" id="wheel-wrap">
           <div class="pointer"></div>
@@ -40,7 +29,6 @@
 
         <div class="actions">
           <button class="btn" id="spin">Girar la ruleta</button>
-          <button class="btn btn--ghost" id="change-prize" type="button">Poner nombre del premio</button>
         </div>
 
         <div class="minilinks">
@@ -67,14 +55,6 @@
         </div>
 
         <div class="side-card">
-          <div class="prize-list-head">
-            <h2>Premios</h2>
-            <span class="prize-remaining" id="prize-remaining">—</span>
-          </div>
-          <div class="prize-list" id="prize-list"></div>
-        </div>
-
-        <div class="side-card">
           <h2>Últimos ganadores</h2>
           <ul class="winners" id="winners"></ul>
           <p class="side-empty" id="winners-empty">Todavía no giró la ruleta.</p>
@@ -93,11 +73,11 @@
       </div>
       <div class="reveal-foot">
         <div class="msg" id="reveal-msg">
-          Acercate a la mesa de organización para retirar tu premio.
+          Acercate a la mesa de organización para recibir tu premio.
           <small>Al confirmar, sale de la ruleta. Si está ausente, vuelve a girar.</small>
         </div>
         <div class="btns">
-          <button class="btn" id="deliver" type="button">Confirmar entrega</button>
+          <button class="btn" id="deliver" type="button">Confirmar ganador</button>
           <button class="btn btn--danger" id="absent" type="button">Ausente: volver a girar</button>
         </div>
       </div>
@@ -117,54 +97,12 @@
       const spinBtn = document.querySelector("#spin");
       const subEl = document.querySelector("#sub");
       const countEl = document.querySelector("#count");
-      const prizeTitle = document.querySelector("#prize-title");
-      const prizeCategoryBadge = document.querySelector("#prize-category");
-
-      // Premios de la planilla de regalos, por categoría y cantidad.
-      // Para ajustar cantidades o categorías, editá estos pares [categoría, cantidad].
-      const PRIZE_COUNTS = [
-        ["Tecnología", 14],
-        ["Experiencias", 7],
-        ["Matero y térmicos", 15],
-        ["Mochilas", 2],
-        ["Viaje y oficina", 4],
-        ["Casa y gourmet", 6],
-        ["Órden de compra", 10],
-      ];
-      // Lista de los 58 premios. Cada uno: id, categoría, número dentro de la
-      // categoría, nombre puntual (manual, opcional) y si ya se entregó.
-      const PRIZES = [];
-      for (const [category, count] of PRIZE_COUNTS) {
-        for (let n = 1; n <= count; n++) {
-          PRIZES.push({ id: PRIZES.length, category, n, name: "", drawn: false });
-        }
-      }
 
       let pool = [];          // [{ name }]
       let rotation = 0;       // radianes
       let spinning = false;
-      let currentPrizeId = null;  // premio en juego (elegido al azar entre los que quedan)
-
-      function currentPrize() {
-        return PRIZES.find((p) => p.id === currentPrizeId) || null;
-      }
-
-      // Elige al azar un premio entre los que todavía no se entregaron (evitando
-      // repetir el que ya está en juego, salvo que sea el único que queda).
-      function pickRandomPrize() {
-        let avail = PRIZES.filter((p) => !p.drawn && p.id !== currentPrizeId);
-        if (!avail.length) avail = PRIZES.filter((p) => !p.drawn);
-        currentPrizeId = avail.length ? avail[Math.floor(Math.random() * avail.length)].id : null;
-      }
-
-      // Texto del premio para el revelado y el historial.
-      function prizeText() {
-        const p = currentPrize();
-        if (!p) return "";
-        return p.name ? `${p.name} · ${p.category}` : p.category;
-      }
       const winners = [];
-      const delivered = new Set();  // nombres ya entregados: no vuelven a la ruleta
+      const delivered = new Set();  // nombres ya sorteados: no vuelven a la ruleta
       let lastWinner = null;  // índice pendiente de resolución en el revelado
 
       // --- Sonido de giro (Web Audio API, sin archivos externos) ---
@@ -381,9 +319,6 @@
         lastWinner = index;
         const winner = pool[index];
         document.querySelector("#reveal-name").textContent = winner.name;
-        const prize = prizeText();
-        document.querySelector("#reveal-tag").textContent =
-          prize ? `Ganador · ${prize}` : "Ganador";
         reveal.hidden = false;
         requestAnimationFrame(() => reveal.classList.add("is-open"));
         playWin();
@@ -394,11 +329,11 @@
         setTimeout(() => { reveal.hidden = true; }, 250);
       }
 
-      // Confirmar entrega: sale de la ruleta y queda en el historial.
+      // Confirmar ganador: sale de la ruleta y queda en el historial.
       document.querySelector("#deliver").addEventListener("click", () => {
         if (lastWinner == null) return;
         const winner = pool[lastWinner];
-        winners.unshift({ name: winner.name, prize: prizeText(), at: new Date() });
+        winners.unshift({ name: winner.name, at: new Date() });
         delivered.add(winner.name);
         pool.splice(lastWinner, 1);
         lastWinner = null;
@@ -407,11 +342,6 @@
         draw();
         spinning = false;
         spinBtn.disabled = pool.length === 0;
-        // El premio entregado se tacha y sale al azar el próximo.
-        const givenPrize = currentPrize();
-        if (givenPrize) givenPrize.drawn = true;
-        pickRandomPrize();
-        renderPrize();
         closeReveal();
       });
 
@@ -430,121 +360,23 @@
         emptyEl.hidden = winners.length > 0;
         for (const w of winners) {
           const li = document.createElement("li");
-          const left = document.createElement("div");
           const name = document.createElement("div");
           name.className = "wname";
           name.textContent = w.name;
-          left.append(name);
-          if (w.prize) {
-            const prize = document.createElement("div");
-            prize.className = "wprize";
-            prize.textContent = w.prize;
-            left.append(prize);
-          }
           const time = document.createElement("span");
           time.className = "wtime";
           time.textContent = w.at.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
-          li.append(left, time);
+          li.append(name, time);
           listEl.append(li);
         }
       }
-
-      // La categoría NO se elige: el premio en juego sale al azar de los que quedan.
-      // Lo único manual es el nombre puntual del premio.
-      const prizeEdit = document.querySelector("#prize-edit");
-      const prizeInput = document.querySelector("#prize-input");
-      const prizeProgress = document.querySelector("#prize-progress");
-      const prizeListEl = document.querySelector("#prize-list");
-      const prizeRemainingEl = document.querySelector("#prize-remaining");
-
-      // Lista lateral: los 58 premios agrupados por categoría. Se tacha cada uno
-      // al entregarse y se resalta el que está en juego.
-      function renderPrizeList() {
-        prizeListEl.innerHTML = "";
-        for (const [category] of PRIZE_COUNTS) {
-          const items = PRIZES.filter((p) => p.category === category);
-          const left = items.filter((p) => !p.drawn).length;
-
-          const group = document.createElement("div");
-          group.className = "prize-group";
-          const head = document.createElement("div");
-          head.className = "prize-group-head";
-          const title = document.createElement("span");
-          title.textContent = category;
-          const count = document.createElement("span");
-          count.className = "prize-group-count";
-          count.textContent = `${left}/${items.length}`;
-          head.append(title, count);
-          group.append(head);
-
-          const ul = document.createElement("ul");
-          for (const p of items) {
-            const li = document.createElement("li");
-            li.className = "prize-item";
-            if (p.drawn) li.classList.add("is-drawn");
-            if (p.id === currentPrizeId) li.classList.add("is-current");
-            li.textContent = p.name || `Premio ${p.n}`;
-            ul.append(li);
-          }
-          group.append(ul);
-          prizeListEl.append(group);
-        }
-      }
-
-      // Muestra el premio en juego: nombre puntual (si hay) como título, la
-      // categoría como etiqueta, y cuántos se entregaron.
-      function renderPrize() {
-        const p = currentPrize();
-        const drawn = PRIZES.filter((x) => x.drawn).length;
-        if (p) {
-          prizeTitle.textContent = p.name || p.category;
-          if (p.name) {
-            prizeCategoryBadge.textContent = p.category;
-            prizeCategoryBadge.hidden = false;
-          } else {
-            prizeCategoryBadge.hidden = true;
-          }
-        } else {
-          prizeTitle.textContent = "Todos los premios entregados";
-          prizeCategoryBadge.hidden = true;
-        }
-        prizeProgress.textContent = `Entregados ${drawn} de ${PRIZES.length}`;
-        prizeRemainingEl.textContent = `${PRIZES.length - drawn} quedan`;
-        renderPrizeList();
-      }
-
-      // "Otro al azar": vuelve a sortear el premio en juego entre los que quedan.
-      document.querySelector("#reroll-prize").addEventListener("click", () => {
-        pickRandomPrize();
-        const p = currentPrize();
-        prizeInput.value = p ? p.name : "";
-        renderPrize();
-      });
-
-      // Nombre puntual del premio en juego (edición inline, opcional).
-      document.querySelector("#change-prize").addEventListener("click", () => {
-        if (!currentPrize()) return;
-        prizeEdit.classList.toggle("open");
-        if (prizeEdit.classList.contains("open")) {
-          prizeInput.value = currentPrize().name;
-          prizeInput.focus();
-        }
-      });
-      function savePrize() {
-        const p = currentPrize();
-        if (p) p.name = prizeInput.value.trim();
-        renderPrize();
-        prizeEdit.classList.remove("open");
-      }
-      document.querySelector("#save-prize").addEventListener("click", savePrize);
-      prizeInput.addEventListener("keydown", (e) => { if (e.key === "Enter") savePrize(); });
 
       async function loadParticipants(resetRotation = false) {
         try {
           const response = await fetch("/api/participants");
           if (!response.ok) throw new Error();
           const names = await response.json();
-          // Los ya entregados no vuelven a la ruleta.
+          // Los ya sorteados no vuelven a la ruleta.
           pool = names.filter((name) => !delivered.has(name)).map((name) => ({ name }));
           if (resetRotation) rotation = 0;
           if (!spinning) spinBtn.disabled = pool.length === 0;
@@ -578,14 +410,10 @@
         loadCount();
       });
       document.querySelector("#reset").addEventListener("click", () => {
-        if (!confirm("¿Reiniciar ganadores y premios, y volver a cargar todos los participantes?")) return;
+        if (!confirm("¿Reiniciar la lista de ganadores y volver a cargar todos los participantes?")) return;
         winners.length = 0;
         delivered.clear();
-        for (const p of PRIZES) p.drawn = false;
-        currentPrizeId = null;
-        pickRandomPrize();
         renderWinners();
-        renderPrize();
         loadParticipants(true);
       });
       window.addEventListener("resize", sizeCanvas);
@@ -598,8 +426,6 @@
       }, 15000);
 
       renderWinners();
-      pickRandomPrize();
-      renderPrize();
       sizeCanvas();
       loadParticipants(true);
       loadCount();
