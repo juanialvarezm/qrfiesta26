@@ -178,37 +178,70 @@
         }
         if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
       }
-      // "Tic" corto: suena cada vez que un segmento pasa por el puntero.
-      function playTick(vol = 0.22) {
+      // Ruido blanco reutilizable para los golpes (se arma una sola vez).
+      let noiseBuffer = null;
+      function getNoise() {
+        if (!noiseBuffer && audioCtx) {
+          const len = Math.floor(audioCtx.sampleRate * 0.08);
+          noiseBuffer = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+          const data = noiseBuffer.getChannelData(0);
+          for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+        }
+        return noiseBuffer;
+      }
+
+      // "Tic" natural: golpe percusivo (lengüeta contra el diente), hecho con
+      // una ráfaga de ruido filtrado + un cuerpo grave corto. Varía tono y
+      // volumen en cada golpe para que no suene robótico.
+      function playTick() {
         if (!soundOn || !audioCtx) return;
         const t = audioCtx.currentTime;
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = "square";
-        osc.frequency.setValueAtTime(1150, t);
-        gain.gain.setValueAtTime(0.0001, t);
-        gain.gain.exponentialRampToValueAtTime(vol, t + 0.004);
-        gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
-        osc.connect(gain).connect(audioCtx.destination);
-        osc.start(t);
-        osc.stop(t + 0.06);
+
+        // Cuerpo del "clack": ruido por un pasa-banda (madera/plástico).
+        const src = audioCtx.createBufferSource();
+        src.buffer = getNoise();
+        const hp = audioCtx.createBiquadFilter();
+        hp.type = "highpass";
+        hp.frequency.value = 600;
+        const bp = audioCtx.createBiquadFilter();
+        bp.type = "bandpass";
+        bp.frequency.value = 1700 + Math.random() * 1000;  // leve variación
+        bp.Q.value = 0.9;
+        const gN = audioCtx.createGain();
+        const vol = 0.22 + Math.random() * 0.1;
+        gN.gain.setValueAtTime(vol, t);
+        gN.gain.exponentialRampToValueAtTime(0.0001, t + 0.045 + Math.random() * 0.02);
+        src.connect(hp).connect(bp).connect(gN).connect(audioCtx.destination);
+        src.start(t);
+        src.stop(t + 0.09);
+
+        // "Thunk" grave muy corto que le da peso al golpe.
+        const body = audioCtx.createOscillator();
+        const gB = audioCtx.createGain();
+        body.type = "sine";
+        body.frequency.setValueAtTime(150 + Math.random() * 60, t);
+        gB.gain.setValueAtTime(0.12, t);
+        gB.gain.exponentialRampToValueAtTime(0.0001, t + 0.03);
+        body.connect(gB).connect(audioCtx.destination);
+        body.start(t);
+        body.stop(t + 0.04);
       }
       // Acorde ascendente suave al aparecer el ganador.
       function playWin() {
         if (!soundOn || !audioCtx) return;
         const base = audioCtx.currentTime;
         [523.25, 659.25, 783.99].forEach((freq, i) => {
-          const t = base + i * 0.1;
+          const t = base + i * 0.12;
           const osc = audioCtx.createOscillator();
           const gain = audioCtx.createGain();
-          osc.type = "triangle";
+          osc.type = "sine";
           osc.frequency.setValueAtTime(freq, t);
           gain.gain.setValueAtTime(0.0001, t);
-          gain.gain.exponentialRampToValueAtTime(0.3, t + 0.03);
-          gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+          gain.gain.exponentialRampToValueAtTime(0.26, t + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
           osc.connect(gain).connect(audioCtx.destination);
           osc.start(t);
-          osc.stop(t + 0.55);
+          osc.stop(t + 0.85);
         });
       }
 
